@@ -423,12 +423,204 @@
     },
     {
       "type": "row",
-      "title": "Template drift",
+      "title": "Trend and CI history",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 9
+      },
+      "collapsed": false,
+      "id": 11,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Open problems by kind",
+      "description": "How many repos are in each bad state over time. Three distinct kinds, so the colours carry identity, not severity.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_ci_last_run_success == bool 0)",
+          "legendFormat": "CI red on main"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(jq_rhiza_releases_behind > bool 0)",
+          "legendFormat": "Behind template"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "pointSize": 8,
+            "spanNulls": true,
+            "axisGridShow": true,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CI red on main"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Behind template"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "id": 12
+    },
+    {
+      "type": "state-timeline",
+      "title": "CI on the default branch, per repo",
+      "description": "One row per repo; green means the last completed run on the default branch passed. Owner prefixes are stripped for legibility - repo names are unique across the monitored orgs. Gaps are windows where the collector was not running.",
+      "gridPos": {
+        "h": 20,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jq_ci_last_run_success",
+          "legendFormat": "{{repo}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "options": {
+        "showValue": "never",
+        "rowHeight": 0.7,
+        "mergeValues": true,
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 90
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Failing",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Passing",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "noValue": "no run",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#d03b3b",
+                "value": null
+              },
+              {
+                "color": "#0ca30c",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 13,
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^[^/]+/(.*)$",
+            "renamePattern": "$1"
+          }
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Template drift",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 38
       },
       "collapsed": false,
       "id": 8,
@@ -442,7 +634,7 @@
         "h": 13,
         "w": 10,
         "x": 0,
-        "y": 10
+        "y": 39
       },
       "datasource": {
         "type": "prometheus",
@@ -517,7 +709,7 @@
         "h": 13,
         "w": 14,
         "x": 10,
-        "y": 10
+        "y": 39
       },
       "datasource": {
         "type": "prometheus",
@@ -637,198 +829,6 @@
         ]
       },
       "id": 10
-    },
-    {
-      "type": "row",
-      "title": "Trend and CI history",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 23
-      },
-      "collapsed": false,
-      "id": 11,
-      "panels": []
-    },
-    {
-      "type": "timeseries",
-      "title": "Open problems by kind",
-      "description": "How many repos are in each bad state over time. Three distinct kinds, so the colours carry identity, not severity.",
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 24
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_ci_last_run_success == bool 0)",
-          "legendFormat": "CI red on main"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(jq_rhiza_releases_behind > bool 0)",
-          "legendFormat": "Behind template"
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "pointSize": 8,
-            "spanNulls": true,
-            "axisGridShow": true,
-            "axisBorderShow": false
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "CI red on main"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3987e5"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Behind template"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#d95926"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "id": 12
-    },
-    {
-      "type": "state-timeline",
-      "title": "CI on the default branch, per repo",
-      "description": "One row per repo; green means the last completed run on the default branch passed. Owner prefixes are stripped for legibility - repo names are unique across the monitored orgs. Gaps are windows where the collector was not running.",
-      "gridPos": {
-        "h": 20,
-        "w": 24,
-        "x": 0,
-        "y": 32
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "jq_ci_last_run_success",
-          "legendFormat": "{{repo}}",
-          "range": true,
-          "instant": false
-        }
-      ],
-      "options": {
-        "showValue": "never",
-        "rowHeight": 0.7,
-        "mergeValues": true,
-        "alignValue": "left",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "lineWidth": 0,
-            "fillOpacity": 90
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "Failing",
-                  "index": 0
-                },
-                "1": {
-                  "text": "Passing",
-                  "index": 1
-                }
-              }
-            }
-          ],
-          "noValue": "no run",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#d03b3b",
-                "value": null
-              },
-              {
-                "color": "#0ca30c",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "id": 13,
-      "transformations": [
-        {
-          "id": "renameByRegex",
-          "options": {
-            "regex": "^[^/]+/(.*)$",
-            "renamePattern": "$1"
-          }
-        }
-      ]
     },
     {
       "type": "row",

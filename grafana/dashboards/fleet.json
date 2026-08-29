@@ -95,6 +95,104 @@
     },
     {
       "type": "stat",
+      "title": "Open PRs",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_open_pull_requests{repo=~\"$repo\"})",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "links": [
+            {
+              "title": "Show the breakdown by repo",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=16&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "description": "Open pull requests across the fleet, counted before any per-repo clipping.",
+      "id": 531
+    },
+    {
+      "type": "stat",
+      "title": "Open issues",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_open_issues{repo=~\"$repo\"})",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "links": [
+            {
+              "title": "Show the breakdown by repo",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=107&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "description": "Open issues across the fleet, excluding pull requests - GitHub's own open_issues_count lumps the two together, so PRs are subtracted out.",
+      "id": 532
+    },
+    {
+      "type": "stat",
       "title": "CI red on main",
       "description": "Repos whose last completed run on the default branch did not pass.",
       "gridPos": {
@@ -223,6 +321,129 @@
     },
     {
       "type": "stat",
+      "title": "PRs with red checks",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_open_pull_requests_failing{repo=~\"$repo\"})",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#d03b3b",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Show the repos behind this number",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=104&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "id": 6
+    },
+    {
+      "type": "stat",
+      "title": "Local repos not in sync",
+      "description": "Clones whose default-branch commit differs from the one GitHub reports - almost always a checkout that has not been pulled. Needs no fetch to compute, so unlike Ahead/Behind it is never stale.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_local_default_branch_synced{repo=~\"$repo\"} == bool 0)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Show the repos behind this number",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=106&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "id": 18
+    },
+    {
+      "type": "stat",
       "title": "Dirty working copies",
       "description": "Local clones with uncommitted changes to tracked files.",
       "gridPos": {
@@ -282,67 +503,6 @@
         "overrides": []
       },
       "id": 5
-    },
-    {
-      "type": "stat",
-      "title": "PRs with red checks",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 20,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_open_pull_requests_failing{repo=~\"$repo\"})",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ca30c",
-                "value": null
-              },
-              {
-                "color": "#d03b3b",
-                "value": 1
-              }
-            ]
-          },
-          "links": [
-            {
-              "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=104&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "id": 6
     },
     {
       "type": "stat",
@@ -407,13 +567,284 @@
       "id": 7
     },
     {
+      "type": "stat",
+      "title": "Data age",
+      "description": "How long since the collector last refreshed, worst of its two sources. This machine's Docker pauses when the Mac sleeps, so nothing is collected then - an amber or red value here means the numbers above are from before the last sleep, and panels can read 'No data' entirely once the gap passes Prometheus's 5-minute staleness window.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - min(jq_collector_last_success_timestamp_seconds)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 600
+              },
+              {
+                "color": "#d03b3b",
+                "value": 1800
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 19
+    },
+    {
+      "type": "row",
+      "title": "Trend and CI history",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "collapsed": false,
+      "panels": [],
+      "id": 11
+    },
+    {
+      "type": "timeseries",
+      "title": "Open problems by kind",
+      "description": "How many repos are in each bad state over time. Three distinct kinds, so the colours carry identity, not severity.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_ci_last_run_success{repo=~\"$repo\"} == bool 0)",
+          "legendFormat": "CI red on main"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(jq_rhiza_releases_behind{repo=~\"$repo\"} > bool 0)",
+          "legendFormat": "Behind template"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(jq_local_dirty_files{repo=~\"$repo\"} > bool 0)",
+          "legendFormat": "Dirty working copies"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "pointSize": 8,
+            "spanNulls": true,
+            "axisGridShow": true,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CI red on main"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Behind template"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Dirty working copies"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#199e70"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "id": 12
+    },
+    {
+      "type": "state-timeline",
+      "title": "CI on the default branch, per repo",
+      "description": "One row per repo; green means the last completed run on the default branch passed. Owner prefixes are stripped for legibility - repo names are unique across the monitored orgs. Gaps are windows where the collector was not running.",
+      "gridPos": {
+        "h": 20,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jq_ci_last_run_success{repo=~\"$repo\"}",
+          "legendFormat": "{{repo}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "options": {
+        "showValue": "never",
+        "rowHeight": 0.7,
+        "mergeValues": true,
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 90
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Failing",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Passing",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "noValue": "no run",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#d03b3b",
+                "value": null
+              },
+              {
+                "color": "#0ca30c",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 13,
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^[^/]+/(.*)$",
+            "renamePattern": "$1"
+          }
+        }
+      ]
+    },
+    {
       "type": "row",
       "title": "Template drift",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 40
       },
       "collapsed": false,
       "panels": [],
@@ -427,7 +858,7 @@
         "h": 13,
         "w": 10,
         "x": 0,
-        "y": 12
+        "y": 41
       },
       "datasource": {
         "type": "prometheus",
@@ -502,7 +933,7 @@
         "h": 13,
         "w": 14,
         "x": 10,
-        "y": 12
+        "y": 41
       },
       "datasource": {
         "type": "prometheus",
@@ -622,218 +1053,6 @@
         ]
       },
       "id": 10
-    },
-    {
-      "type": "row",
-      "title": "Trend and CI history",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 25
-      },
-      "collapsed": false,
-      "panels": [],
-      "id": 11
-    },
-    {
-      "type": "timeseries",
-      "title": "Open problems by kind",
-      "description": "How many repos are in each bad state over time. Three distinct kinds, so the colours carry identity, not severity.",
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 26
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_ci_last_run_success{repo=~\"$repo\"} == bool 0)",
-          "legendFormat": "CI red on main"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(jq_rhiza_releases_behind{repo=~\"$repo\"} > bool 0)",
-          "legendFormat": "Behind template"
-        },
-        {
-          "refId": "C",
-          "expr": "sum(jq_local_dirty_files{repo=~\"$repo\"} > bool 0)",
-          "legendFormat": "Dirty working copies"
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "pointSize": 8,
-            "spanNulls": true,
-            "axisGridShow": true,
-            "axisBorderShow": false
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "CI red on main"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3987e5"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Behind template"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#d95926"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Dirty working copies"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#199e70"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "id": 12
-    },
-    {
-      "type": "state-timeline",
-      "title": "CI on the default branch, per repo",
-      "description": "One row per repo; green means the last completed run on the default branch passed. Owner prefixes are stripped for legibility - repo names are unique across the monitored orgs. Gaps are windows where the collector was not running.",
-      "gridPos": {
-        "h": 20,
-        "w": 24,
-        "x": 0,
-        "y": 34
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "jq_ci_last_run_success{repo=~\"$repo\"}",
-          "legendFormat": "{{repo}}",
-          "range": true,
-          "instant": false
-        }
-      ],
-      "options": {
-        "showValue": "never",
-        "rowHeight": 0.7,
-        "mergeValues": true,
-        "alignValue": "left",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "lineWidth": 0,
-            "fillOpacity": 90
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "Failing",
-                  "index": 0
-                },
-                "1": {
-                  "text": "Passing",
-                  "index": 1
-                }
-              }
-            }
-          ],
-          "noValue": "no run",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#d03b3b",
-                "value": null
-              },
-              {
-                "color": "#0ca30c",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "id": 13,
-      "transformations": [
-        {
-          "id": "renameByRegex",
-          "options": {
-            "regex": "^[^/]+/(.*)$",
-            "renamePattern": "$1"
-          }
-        }
-      ]
     },
     {
       "type": "row",
@@ -2708,225 +2927,6 @@
         }
       ],
       "id": 526
-    },
-    {
-      "type": "stat",
-      "title": "Local repos not in sync",
-      "description": "Clones whose default-branch commit differs from the one GitHub reports - almost always a checkout that has not been pulled. Needs no fetch to compute, so unlike Ahead/Behind it is never stale.",
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 0,
-        "y": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_local_default_branch_synced{repo=~\"$repo\"} == bool 0)",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ca30c",
-                "value": null
-              },
-              {
-                "color": "#fab219",
-                "value": 1
-              }
-            ]
-          },
-          "links": [
-            {
-              "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=106&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "id": 18
-    },
-    {
-      "type": "stat",
-      "title": "Open PRs",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 4,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_open_pull_requests{repo=~\"$repo\"})",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "none",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "links": [
-            {
-              "title": "Show the breakdown by repo",
-              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=16&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "description": "Open pull requests across the fleet, counted before any per-repo clipping.",
-      "id": 531
-    },
-    {
-      "type": "stat",
-      "title": "Open issues",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 8,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_open_issues{repo=~\"$repo\"})",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "none",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "links": [
-            {
-              "title": "Show the breakdown by repo",
-              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=107&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "description": "Open issues across the fleet, excluding pull requests - GitHub's own open_issues_count lumps the two together, so PRs are subtracted out.",
-      "id": 532
-    },
-    {
-      "type": "stat",
-      "title": "Data age",
-      "description": "How long since the collector last refreshed, worst of its two sources. This machine's Docker pauses when the Mac sleeps, so nothing is collected then - an amber or red value here means the numbers above are from before the last sleep, and panels can read 'No data' entirely once the gap passes Prometheus's 5-minute staleness window.",
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 18,
-        "y": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "time() - min(jq_collector_last_success_timestamp_seconds)",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ca30c",
-                "value": null
-              },
-              {
-                "color": "#fab219",
-                "value": 600
-              },
-              {
-                "color": "#d03b3b",
-                "value": 1800
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "id": 19
     }
   ]
 }
