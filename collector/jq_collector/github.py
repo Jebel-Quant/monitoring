@@ -215,15 +215,19 @@ class GitHub:
     def latest_runs(self, full_name: str, branch: str) -> list[dict]:
         """The newest completed run of each active workflow on ``branch``.
 
-        GitHub orders runs by ``created_at``, not by when they finished, so the
-        newest run can sort below an older one that took longer or was re-run;
-        they are compared on ``updated_at`` instead. Fetching only the single
-        newest run - which this did originally - hid every other workflow, so a
-        repo whose docs build was failing reported green.
+        The runs feed is ordered by ``created_at`` and is not a per-workflow
+        view, so on a busy repo it is dominated by whatever runs most often: of
+        cvxgrp/simulator's 2406 completed runs on main, the first hundred cover
+        only 6 of its 23 active workflows. A quiet workflow - a weekly job, say -
+        falls off the page entirely and its failure becomes invisible. So
+        anything the feed does not account for is asked for directly.
 
-        One extra call per repo for the workflow listing; the runs page is one
-        call either way.
+        Runs are also compared on ``updated_at`` rather than trusting feed
+        order, because ``created_at`` ordering puts a long or re-run job below
+        newer ones that finished earlier.
         """
+        active = self.active_workflows(full_name)
+
         data = self._json(
             f"/repos/{full_name}/actions/runs",
             branch=branch,
@@ -231,13 +235,8 @@ class GitHub:
             exclude_pull_requests="true",
             per_page=100,
         )
-        if not isinstance(data, dict):
-            return []
-
-        active = self.active_workflows(full_name)
-
         newest: dict[object, dict] = {}
-        for run in data.get("workflow_runs") or []:
+        for run in (data or {}).get("workflow_runs") or []:
             wid = run.get("workflow_id")
             if active is not None and wid not in active:
                 continue  # workflow deleted or disabled since this run
@@ -246,12 +245,29 @@ class GitHub:
             if current is None or _ts(run.get("updated_at")) > _ts(
                 current.get("updated_at")
             ):
-                run = {
-                    **run,
-                    "_name": (active or {}).get(wid) or run.get("name") or "unnamed",
-                }
                 newest[key] = run
-        return list(newest.values())
+
+        # One targeted call per workflow the feed missed. Quiet repos pay
+        # nothing; only the busy ones do, and only for what was actually hidden.
+        if active is not None:
+            for wid in active:
+                if wid in newest:
+                    continue
+                extra = self._json(
+                    f"/repos/{full_name}/actions/workflows/{wid}/runs",
+                    branch=branch,
+                    status="completed",
+                    exclude_pull_requests="true",
+                    per_page=1,
+                )
+                runs = (extra or {}).get("workflow_runs") or []
+                if runs:
+                    newest[wid] = runs[0]
+
+        return [
+            {**run, "_name": (active or {}).get(wid) or run.get("name") or "unnamed"}
+            for wid, run in newest.items()
+        ]
 
     def open_pulls(self, full_name: str) -> tuple[int, list[PullRequest]]:
         """(total open PRs, detail for the first ``max_prs_per_repo``).
