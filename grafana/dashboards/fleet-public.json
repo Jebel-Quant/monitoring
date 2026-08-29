@@ -1,7 +1,7 @@
 {
   "uid": "jq-fleet-public",
   "title": "Jebel-Quant Fleet (public)",
-  "description": "Public copy of the fleet board. Covers public repos only - the collector runs with JQ_PUBLIC_ONLY, so private repos are never gathered.",
+  "description": "Public copy of the fleet board. Public repos only, and nothing about any particular working copy - the collector runs with JQ_PUBLIC_ONLY and the local-clone panels are stripped from this copy.",
   "tags": [
     "fleet",
     "jebel-quant",
@@ -205,68 +205,6 @@
     },
     {
       "type": "stat",
-      "title": "Dirty working copies",
-      "description": "Local clones with uncommitted changes to tracked files.",
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 6,
-        "y": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_local_dirty_files > bool 0)",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ca30c",
-                "value": null
-              },
-              {
-                "color": "#fab219",
-                "value": 1
-              }
-            ]
-          },
-          "links": [
-            {
-              "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet-public/jebel-quant-fleet-public?viewPanel=103&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "id": 5
-    },
-    {
-      "type": "stat",
       "title": "PRs with red checks",
       "gridPos": {
         "h": 5,
@@ -325,68 +263,6 @@
         "overrides": []
       },
       "id": 6
-    },
-    {
-      "type": "stat",
-      "title": "Clones off default branch",
-      "description": "A branch checked out and left behind - the usual residue of a parallel session.",
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 12,
-        "y": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_local_on_default_branch == bool 0)",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ca30c",
-                "value": null
-              },
-              {
-                "color": "#fab219",
-                "value": 1
-              }
-            ]
-          },
-          "links": [
-            {
-              "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet-public/jebel-quant-fleet-public?viewPanel=105&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "id": 7
     },
     {
       "type": "row",
@@ -642,11 +518,6 @@
           "refId": "B",
           "expr": "sum(jq_rhiza_releases_behind > bool 0)",
           "legendFormat": "Behind template"
-        },
-        {
-          "refId": "C",
-          "expr": "sum(jq_local_dirty_files > bool 0)",
-          "legendFormat": "Dirty working copies"
         }
       ],
       "options": {
@@ -704,21 +575,6 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#d95926"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Dirty working copies"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#199e70"
                 }
               }
             ]
@@ -1328,304 +1184,6 @@
       "id": 16
     },
     {
-      "type": "table",
-      "title": "Local working copies",
-      "description": "Ahead and behind are as of each clone's last fetch - read them next to the fetch age. 'In sync' compares the local default-branch commit with the one GitHub reports and needs no fetch. 'Checkout ref' is the template ref pinned in *this clone*, which can lag the repo's own ref shown under Template drift.",
-      "gridPos": {
-        "h": 16,
-        "w": 24,
-        "x": 0,
-        "y": 81
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "jq_local_branch_info",
-          "instant": true,
-          "format": "table"
-        },
-        {
-          "refId": "B",
-          "expr": "jq_local_dirty_files",
-          "instant": true,
-          "format": "table"
-        },
-        {
-          "refId": "C",
-          "expr": "jq_local_untracked_files",
-          "instant": true,
-          "format": "table"
-        },
-        {
-          "refId": "D",
-          "expr": "jq_local_ahead_commits",
-          "instant": true,
-          "format": "table"
-        },
-        {
-          "refId": "E",
-          "expr": "jq_local_behind_commits",
-          "instant": true,
-          "format": "table"
-        },
-        {
-          "refId": "F",
-          "expr": "jq_local_default_branch_synced",
-          "instant": true,
-          "format": "table"
-        },
-        {
-          "refId": "G",
-          "expr": "jq_local_fetch_age_seconds",
-          "instant": true,
-          "format": "table"
-        },
-        {
-          "refId": "H",
-          "expr": "jq_local_stash_entries",
-          "instant": true,
-          "format": "table"
-        },
-        {
-          "refId": "I",
-          "expr": "jq_local_template_ref_info",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "joinByField",
-          "options": {
-            "byField": "repo",
-            "mode": "outer"
-          }
-        },
-        {
-          "id": "filterFieldsByName",
-          "options": {
-            "include": {
-              "pattern": "^(repo|branch|ref|Value #B|Value #C|Value #D|Value #E|Value #F|Value #G|Value #H)$"
-            }
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {},
-            "indexByName": {
-              "repo": 0,
-              "branch": 1,
-              "Value #B": 3,
-              "Value #C": 4,
-              "Value #D": 5,
-              "Value #E": 6,
-              "Value #F": 7,
-              "Value #G": 8,
-              "Value #H": 9,
-              "ref": 2
-            },
-            "renameByName": {
-              "repo": "Repo",
-              "branch": "Branch",
-              "Value #B": "Dirty",
-              "Value #C": "Untracked",
-              "Value #D": "Ahead",
-              "Value #E": "Behind",
-              "Value #F": "In sync",
-              "Value #G": "Last fetch",
-              "Value #H": "Stashes",
-              "ref": "Checkout ref"
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "sort": [
-              {
-                "field": "Dirty",
-                "desc": true
-              }
-            ]
-          }
-        }
-      ],
-      "options": {
-        "showHeader": true,
-        "footer": {
-          "show": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "right",
-            "cellOptions": {
-              "type": "auto"
-            }
-          },
-          "decimals": 0
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Repo"
-            },
-            "properties": [
-              {
-                "id": "custom.align",
-                "value": "left"
-              },
-              {
-                "id": "custom.width",
-                "value": 240
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Branch"
-            },
-            "properties": [
-              {
-                "id": "custom.align",
-                "value": "left"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Dirty"
-            },
-            "properties": [
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "#898781",
-                      "value": null
-                    },
-                    {
-                      "color": "#fab219",
-                      "value": 1
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "In sync"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "1": {
-                        "text": "\u2713 yes",
-                        "color": "#0ca30c",
-                        "index": 0
-                      }
-                    }
-                  },
-                  {
-                    "type": "value",
-                    "options": {
-                      "0": {
-                        "text": "\u2717 no",
-                        "color": "#fab219",
-                        "index": 1
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
-              {
-                "id": "noValue",
-                "value": "\u2013"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Last fetch"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "s"
-              },
-              {
-                "id": "noValue",
-                "value": "never"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "Ahead|Behind"
-            },
-            "properties": [
-              {
-                "id": "noValue",
-                "value": "no upstream"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Checkout ref"
-            },
-            "properties": [
-              {
-                "id": "custom.align",
-                "value": "left"
-              },
-              {
-                "id": "custom.width",
-                "value": 130
-              },
-              {
-                "id": "noValue",
-                "value": "\u2013"
-              }
-            ]
-          }
-        ]
-      },
-      "id": 17
-    },
-    {
       "id": 100,
       "type": "row",
       "title": "Drill-down (click a tile above)",
@@ -1633,7 +1191,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 97
+        "y": 81
       },
       "collapsed": true,
       "panels": [
@@ -1646,7 +1204,7 @@
             "h": 12,
             "w": 24,
             "x": 0,
-            "y": 98
+            "y": 82
           },
           "datasource": {
             "type": "prometheus",
@@ -1765,7 +1323,7 @@
             "h": 12,
             "w": 24,
             "x": 0,
-            "y": 98
+            "y": 94
           },
           "datasource": {
             "type": "prometheus",
@@ -1873,122 +1431,6 @@
           }
         },
         {
-          "id": 103,
-          "type": "table",
-          "title": "Working copies with uncommitted changes",
-          "description": "Matches the 'Dirty working copies' tile. Counts tracked files only; untracked files are in the main table.",
-          "gridPos": {
-            "h": 12,
-            "w": 24,
-            "x": 0,
-            "y": 98
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "(jq_local_dirty_files > 0) * on(repo) group_left(branch) topk by (repo) (1, jq_local_branch_info)",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true,
-                  "instance": true,
-                  "job": true,
-                  "fleet": true,
-                  "Value": false
-                },
-                "indexByName": {
-                  "repo": 0,
-                  "branch": 1,
-                  "Value": 2
-                },
-                "renameByName": {
-                  "repo": "Repo",
-                  "branch": "Branch",
-                  "Value": "Dirty files"
-                }
-              }
-            },
-            {
-              "id": "sortBy",
-              "options": {
-                "sort": [
-                  {
-                    "field": "Dirty files",
-                    "desc": true
-                  }
-                ]
-              }
-            }
-          ],
-          "options": {
-            "showHeader": true,
-            "footer": {
-              "show": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "cellOptions": {
-                  "type": "auto"
-                }
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Repo"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 260
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
-                        "targetBlank": true
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Dirty files"
-                },
-                "properties": [
-                  {
-                    "id": "custom.align",
-                    "value": "right"
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 140
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
           "id": 104,
           "type": "table",
           "title": "Open pull requests with red checks",
@@ -1997,7 +1439,7 @@
             "h": 12,
             "w": 24,
             "x": 0,
-            "y": 98
+            "y": 106
           },
           "datasource": {
             "type": "prometheus",
@@ -2155,223 +1597,6 @@
           }
         },
         {
-          "id": 105,
-          "type": "table",
-          "title": "Clones parked off their default branch",
-          "description": "Matches the 'Clones off default branch' tile. The value column is omitted - the branch name is the point.",
-          "gridPos": {
-            "h": 12,
-            "w": 24,
-            "x": 0,
-            "y": 98
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "topk by (repo) (1, jq_local_branch_info) and on(repo) (jq_local_on_default_branch == 0)",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true,
-                  "instance": true,
-                  "job": true,
-                  "fleet": true,
-                  "Value": true
-                },
-                "indexByName": {
-                  "repo": 0,
-                  "branch": 1
-                },
-                "renameByName": {
-                  "repo": "Repo",
-                  "branch": "Branch"
-                }
-              }
-            },
-            {
-              "id": "sortBy",
-              "options": {
-                "sort": [
-                  {
-                    "field": "Repo",
-                    "desc": false
-                  }
-                ]
-              }
-            }
-          ],
-          "options": {
-            "showHeader": true,
-            "footer": {
-              "show": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "cellOptions": {
-                  "type": "auto"
-                }
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Repo"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 260
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
-                        "targetBlank": true
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 106,
-          "type": "table",
-          "title": "Local clones not in sync with GitHub",
-          "description": "The local default-branch commit differs from GitHub's. Sorted stalest fetch first - a plain `git pull` clears almost all of these.",
-          "gridPos": {
-            "h": 12,
-            "w": 24,
-            "x": 0,
-            "y": 98
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "(jq_local_fetch_age_seconds and on(repo) (jq_local_default_branch_synced == 0)) * on(repo) group_left(branch) topk by (repo) (1, jq_local_branch_info)",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true,
-                  "instance": true,
-                  "job": true,
-                  "fleet": true
-                },
-                "indexByName": {
-                  "repo": 0,
-                  "branch": 1,
-                  "Value": 2
-                },
-                "renameByName": {
-                  "repo": "Repo",
-                  "branch": "Branch",
-                  "Value": "Last fetch"
-                }
-              }
-            },
-            {
-              "id": "sortBy",
-              "options": {
-                "sort": [
-                  {
-                    "field": "Last fetch",
-                    "desc": true
-                  }
-                ]
-              }
-            }
-          ],
-          "options": {
-            "showHeader": true,
-            "footer": {
-              "show": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "cellOptions": {
-                  "type": "auto"
-                }
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Repo"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 260
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
-                        "targetBlank": true
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Last fetch"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "s"
-                  },
-                  {
-                    "id": "custom.align",
-                    "value": "right"
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 150
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
           "id": 107,
           "type": "table",
           "title": "Open issues by repo",
@@ -2380,7 +1605,7 @@
             "h": 12,
             "w": 24,
             "x": 0,
-            "y": 98
+            "y": 118
           },
           "datasource": {
             "type": "prometheus",
@@ -2493,7 +1718,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 98
+        "y": 82
       },
       "collapsed": true,
       "panels": [
@@ -2504,7 +1729,7 @@
             "h": 5,
             "w": 6,
             "x": 0,
-            "y": 99
+            "y": 83
           },
           "datasource": {
             "type": "prometheus",
@@ -2561,7 +1786,7 @@
             "h": 5,
             "w": 6,
             "x": 6,
-            "y": 99
+            "y": 88
           },
           "datasource": {
             "type": "prometheus",
@@ -2617,7 +1842,7 @@
             "h": 5,
             "w": 12,
             "x": 12,
-            "y": 99
+            "y": 93
           },
           "datasource": {
             "type": "prometheus",
@@ -2690,68 +1915,6 @@
         }
       ],
       "id": 526
-    },
-    {
-      "type": "stat",
-      "title": "Local repos not in sync",
-      "description": "Clones whose default-branch commit differs from the one GitHub reports - almost always a checkout that has not been pulled. Needs no fetch to compute, so unlike Ahead/Behind it is never stale.",
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 0,
-        "y": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_local_default_branch_synced == bool 0)",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ca30c",
-                "value": null
-              },
-              {
-                "color": "#fab219",
-                "value": 1
-              }
-            ]
-          },
-          "links": [
-            {
-              "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet-public/jebel-quant-fleet-public?viewPanel=106&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "id": 18
     },
     {
       "type": "stat",
@@ -2858,7 +2021,7 @@
       "gridPos": {
         "h": 5,
         "w": 6,
-        "x": 18,
+        "x": 0,
         "y": 6
       },
       "datasource": {

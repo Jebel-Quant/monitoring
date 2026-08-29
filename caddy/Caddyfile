@@ -1,0 +1,22 @@
+# Caddy fetches and renews a Let's Encrypt certificate on its own; there is
+# nothing to run by hand and nothing to renew.
+#
+# {$FLEET_DOMAIN} and {$ACME_EMAIL} come from the environment - set them in the
+# .env next to docker-compose.server.yml.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$FLEET_DOMAIN} {
+	reverse_proxy grafana:3000
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

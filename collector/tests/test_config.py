@@ -62,3 +62,14 @@ def test_public_only_reads_the_environment(monkeypatch, value, expected):
 
     importlib.reload(mod)
     assert mod.Config().public_only is expected
+
+
+def test_empty_repo_root_disables_local_scanning(tmp_path):
+    """On a server there are no clones; that must be a clean no-op, not an error
+    logged every minute."""
+    from jq_collector import localgit
+    from jq_collector.config import Config
+
+    cfg = Config()
+    object.__setattr__(cfg, "repo_root", "")
+    assert localgit.scan(cfg, {}) == {}

@@ -37,6 +37,8 @@ class Config:
 
     # Where the clones are mounted (read-only) inside the container. Scanned to
     # a depth of two, so both ~/repos/<repo> and ~/repos/<org>/<repo> are found.
+    # Set empty to skip local scanning entirely - the right setting on a server,
+    # where there are no working copies and the local panels do not apply.
     repo_root: str = os.environ.get("JQ_REPO_ROOT", "/repos")
     scan_depth: int = _int("JQ_SCAN_DEPTH", 2)
 
