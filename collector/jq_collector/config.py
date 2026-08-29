@@ -29,9 +29,7 @@ class Config:
     large shared org - cvxgrp has 100+ repos and only a handful are yours.
     """
 
-    orgs: tuple[str, ...] = field(
-        default_factory=lambda: _csv("JQ_ORGS", ("Jebel-Quant",))
-    )
+    orgs: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_ORGS", ("Jebel-Quant",)))
     extra_repos: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_REPOS"))
 
     token: str = os.environ.get("GITHUB_TOKEN", "")
@@ -61,9 +59,7 @@ class Config:
     # Repos to leave out, as bare names or as owner/name.
     ignore: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_IGNORE"))
 
-    include_archived: bool = (
-        os.environ.get("JQ_INCLUDE_ARCHIVED", "false").lower() == "true"
-    )
+    include_archived: bool = os.environ.get("JQ_INCLUDE_ARCHIVED", "false").lower() == "true"
 
     # Drop private repos entirely - not just their details, but their existence.
     # For a board served world-readable, a private repo's name, its workflow

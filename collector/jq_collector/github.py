@@ -115,9 +115,7 @@ class GitHub:
             found = self._paginate(f"/orgs/{org}/repos", type="all", sort="full_name")
             if not found:
                 # A user account rather than an org, or no org read access.
-                owned = self._paginate(
-                    "/user/repos", affiliation="owner", sort="full_name"
-                )
+                owned = self._paginate("/user/repos", affiliation="owner", sort="full_name")
                 found = [r for r in owned if (r.get("owner") or {}).get("login") == org]
             for raw in found:
                 if raw.get("full_name") not in seen:
@@ -142,9 +140,7 @@ class GitHub:
     def release_tags(self, full_name: str) -> list[str]:
         """Published release tags for a repo, newest first."""
         releases = self._paginate(f"/repos/{full_name}/releases")
-        return [
-            r["tag_name"] for r in releases if not r.get("draft") and r.get("tag_name")
-        ]
+        return [r["tag_name"] for r in releases if not r.get("draft") and r.get("tag_name")]
 
     # -- per repo --------------------------------------------------------
 
@@ -242,9 +238,7 @@ class GitHub:
                 continue  # workflow deleted or disabled since this run
             key = wid if wid is not None else run.get("name")
             current = newest.get(key)
-            if current is None or _ts(run.get("updated_at")) > _ts(
-                current.get("updated_at")
-            ):
+            if current is None or _ts(run.get("updated_at")) > _ts(current.get("updated_at")):
                 newest[key] = run
 
         # One targeted call per workflow the feed missed. Quiet repos pay
@@ -309,9 +303,7 @@ class GitHub:
         runs = data.get("check_runs") or []
         if not runs:
             return "none"
-        conclusions = {
-            r.get("conclusion") for r in runs if r.get("status") == "completed"
-        }
+        conclusions = {r.get("conclusion") for r in runs if r.get("status") == "completed"}
         if any(r.get("status") != "completed" for r in runs):
             return "pending"
         if conclusions & {"failure", "timed_out", "action_required"}:
@@ -387,9 +379,7 @@ def collect(
                 name=r.get("_name") or r.get("name") or "unnamed",
                 conclusion=r.get("conclusion") or "",
                 finished_at=_ts(r.get("updated_at")),
-                duration=max(
-                    0.0, _ts(r.get("updated_at")) - _ts(r.get("run_started_at"))
-                ),
+                duration=max(0.0, _ts(r.get("updated_at")) - _ts(r.get("run_started_at"))),
                 url=r.get("html_url") or "",
             )
             for r in api.latest_runs(full_name, branch)
@@ -398,11 +388,7 @@ def collect(
         # worth showing is that failure - not whichever workflow happens to have
         # run most recently.
         failing = sorted(
-            (
-                w
-                for w in workflows
-                if w.conclusion and w.conclusion not in GOOD_CONCLUSIONS
-            ),
+            (w for w in workflows if w.conclusion and w.conclusion not in GOOD_CONCLUSIONS),
             key=lambda w: w.finished_at,
             reverse=True,
         )
