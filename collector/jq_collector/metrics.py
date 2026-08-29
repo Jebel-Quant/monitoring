@@ -60,9 +60,7 @@ def render(snap: Snapshot):
         "jq_github_rate_limit_remaining",
         "GitHub REST calls left in the current window.",
     )
-    rate_limit = _gauge(
-        "jq_github_rate_limit_limit", "GitHub REST calls allowed per window."
-    )
+    rate_limit = _gauge("jq_github_rate_limit_limit", "GitHub REST calls allowed per window.")
     rate_reset = _gauge(
         "jq_github_rate_limit_reset_timestamp_seconds",
         "Unix time the rate window resets.",
@@ -133,9 +131,7 @@ def render(snap: Snapshot):
         "Unix time that run finished.",
         ["repo"],
     )
-    ci_dur = _gauge(
-        "jq_ci_last_run_duration_seconds", "How long that run took.", ["repo"]
-    )
+    ci_dur = _gauge("jq_ci_last_run_duration_seconds", "How long that run took.", ["repo"])
     wf_ok = _gauge(
         "jq_ci_workflow_success",
         "Per workflow: 1 if its latest completed default-branch run passed.",
@@ -248,19 +244,25 @@ def render(snap: Snapshot):
             if remote.rhiza_behind is not None:
                 behind.add_metric(ident, remote.rhiza_behind)
 
+            # Collapse workflows sharing a name, newest run winning. github.py
+            # already guarantees one per name, but this layer owns the exposition
+            # contract: duplicate label sets are silently dropped by Prometheus
+            # ("samples with different value but same timestamp"), which cost 16
+            # samples a scrape when the invariant was last broken upstream.
+            unique: dict[str, object] = {}
+            for wf in sorted(remote.workflows, key=lambda w: w.finished_at, reverse=True):
+                if wf.conclusion and wf.name not in unique:
+                    unique[wf.name] = wf
+
             bad = 0
-            for wf in remote.workflows:
-                if not wf.conclusion:
-                    continue
+            for wf in unique.values():
                 good = wf.conclusion in _GOOD_CONCLUSIONS
                 bad += 0 if good else 1
                 wf_ok.add_metric([*ident, wf.name], 1 if good else 0)
                 wf_at.add_metric([*ident, wf.name], wf.finished_at)
 
             if remote.ci_conclusion:
-                ci_info.add_metric(
-                    [*ident, remote.ci_conclusion, remote.ci_workflow], 1
-                )
+                ci_info.add_metric([*ident, remote.ci_conclusion, remote.ci_workflow], 1)
                 # Green only when no workflow is red. Deriving this from a single
                 # run made a repo look green whenever some other workflow had run
                 # more recently than the failing one.
@@ -306,9 +308,7 @@ def render(snap: Snapshot):
             if local.fetch_age is not None:
                 fetch_age.add_metric(ident, local.fetch_age)
             if local.default_branch_sha and remote and remote.head_sha:
-                synced.add_metric(
-                    ident, 1 if local.default_branch_sha == remote.head_sha else 0
-                )
+                synced.add_metric(ident, 1 if local.default_branch_sha == remote.head_sha else 0)
 
     yield from (
         repo_info,

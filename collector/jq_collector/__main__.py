@@ -37,9 +37,7 @@ def _refresh_github(cfg: Config, store: Store) -> None:
     # the branch head moved, so this keeps the drift read correct without
     # spending a contents call per repo per refresh.
     ref_cache = {
-        name: (repo.head_sha, repo.rhiza_ref)
-        for name, repo in snap.remote.items()
-        if repo.head_sha
+        name: (repo.head_sha, repo.rhiza_ref) for name, repo in snap.remote.items() if repo.head_sha
     }
     remote, api, latest, excluded = gh.collect(cfg, ref_cache)
     try:
@@ -108,9 +106,7 @@ def main() -> None:
     )
     cfg = Config()
     if not cfg.token:
-        log.warning(
-            "no GITHUB_TOKEN set - unauthenticated GitHub calls are limited to 60/hour"
-        )
+        log.warning("no GITHUB_TOKEN set - unauthenticated GitHub calls are limited to 60/hour")
 
     store = Store()
 

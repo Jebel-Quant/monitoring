@@ -25,9 +25,7 @@ log = logging.getLogger(__name__)
 _TIMEOUT = 20
 
 # Never descend into these while looking for clones.
-_SKIP_DIRS = frozenset(
-    {".git", ".venv", "venv", "node_modules", "__pycache__", ".tox", "target"}
-)
+_SKIP_DIRS = frozenset({".git", ".venv", "venv", "node_modules", "__pycache__", ".tox", "target"})
 
 
 def _git(path: str, *args: str) -> str | None:

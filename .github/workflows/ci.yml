@@ -1,0 +1,73 @@
+# The checks that would have caught the bugs this repo has actually shipped:
+# an undefined Config attribute that crashed every refresh, deleted and renamed
+# workflows counted as live, and a paginated feed that hid failing jobs.
+#
+# CodeQL runs here too via org-level default setup, but it never executes this
+# code - it passed on all three.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  collector:
+    name: collector (lint + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: collector
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Lint
+        run: uvx ruff check jq_collector tests
+
+      - name: Format
+        run: uvx ruff format --check jq_collector tests
+
+      - name: Tests
+        run: uv run --with pytest --with prometheus-client --with httpx --with pyyaml python -m pytest
+
+  dashboards:
+    name: dashboards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Panel ids, link targets and grid overlaps
+        run: python3 scripts/check-dashboard.py
+
+      # The public copy is generated, so it must match what the generator makes
+      # from the current fleet.json - otherwise a dashboard edit silently leaves
+      # the public board stale.
+      - name: Public dashboard is regenerated from source
+        run: |
+          python3 scripts/make-public-dashboard.py
+          git diff --exit-code -- grafana/dashboards/fleet-public.json \
+            || { echo "::error::fleet-public.json is stale - run scripts/make-public-dashboard.py"; exit 1; }
+
+  compose:
+    name: compose files parse
+    runs-on: ubuntu-latest
+    # The overlays only patch services, so they are not valid on their own -
+    # they are checked the way they are actually used. GITHUB_TOKEN is a
+    # required variable in the base file; any value satisfies interpolation.
+    env:
+      GITHUB_TOKEN: dummy-value-for-interpolation-only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Base
+        run: docker compose -f docker-compose.yml config --quiet
+      - name: Base + admin overlay
+        run: docker compose -f docker-compose.yml -f docker-compose.admin.yml config --quiet
+      - name: Base + public overlay
+        run: docker compose -f docker-compose.yml -f docker-compose.public.yml config --quiet
