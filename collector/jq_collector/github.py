@@ -170,16 +170,59 @@ class GitHub:
         ref = parsed.get("ref") if isinstance(parsed, dict) else None
         return str(ref).strip() if ref else ""
 
+    def active_workflows(self, full_name: str) -> dict[int, str] | None:
+        """Active workflow id -> its current name, from the authoritative listing.
+
+        Run history is not a reliable source for either fact. It outlives the
+        workflow file, so a workflow deleted months ago keeps its old runs and a
+        failing last run makes the repo look permanently red for something that
+        no longer exists - Jebel-Quant/platform sat red for 12 weeks on a deleted
+        `latex.yml`. And a renamed workflow appears under BOTH names, so the old
+        name's last run lingers the same way: one id on that repo produced runs
+        called "Build PDF" and "Build vision.pdf".
+
+        Taking the name from here instead means one series per real workflow,
+        labelled with the name it has now. Disabled workflows are left out - a
+        switched-off job is not a failing one.
+
+        Returns None if the listing cannot be read, which means "do not filter":
+        better to over-report than to blank a repo's CI on a transient error.
+        """
+        data = self._json(f"/repos/{full_name}/actions/workflows", per_page=100)
+        if not isinstance(data, dict):
+            return None
+        active = {
+            w["id"]: (w.get("name") or w.get("path") or str(w["id"]))
+            for w in data.get("workflows") or []
+            if w.get("state") == "active" and "id" in w
+        }
+        # Two active workflows may legitimately share a display name; fall back
+        # to the path for those so the metric labels stay unique.
+        seen: dict[str, int] = {}
+        for wid, name in list(active.items()):
+            if name in seen:
+                for other in (wid, seen[name]):
+                    path = next(
+                        (w.get("path") for w in data["workflows"] if w["id"] == other),
+                        None,
+                    )
+                    if path:
+                        active[other] = path
+            else:
+                seen[name] = wid
+        return active
+
     def latest_runs(self, full_name: str, branch: str) -> list[dict]:
-        """The newest completed run of each workflow on ``branch``.
+        """The newest completed run of each active workflow on ``branch``.
 
-        Fetching only the single newest run - which this did originally - hides
-        every other workflow: a repo whose docs build is failing looks green
-        because its lint workflow ran more recently. GitHub also orders runs by
-        ``created_at``, not by when they finished, so even "the newest run" can
-        sort below an older one that took longer or was re-run.
+        GitHub orders runs by ``created_at``, not by when they finished, so the
+        newest run can sort below an older one that took longer or was re-run;
+        they are compared on ``updated_at`` instead. Fetching only the single
+        newest run - which this did originally - hid every other workflow, so a
+        repo whose docs build was failing reported green.
 
-        Still one API call; the page is just bigger.
+        One extra call per repo for the workflow listing; the runs page is one
+        call either way.
         """
         data = self._json(
             f"/repos/{full_name}/actions/runs",
@@ -190,19 +233,23 @@ class GitHub:
         )
         if not isinstance(data, dict):
             return []
-        # Keyed by NAME, not workflow_id: the exported metric is labelled by
-        # name, and a workflow file that was renamed or recreated leaves two
-        # ids sharing one name. Keying on the id exported two series with
-        # identical labels, and Prometheus dropped 16 samples a scrape with
-        # "samples with different value but same timestamp".
+
+        active = self.active_workflows(full_name)
+
         newest: dict[object, dict] = {}
         for run in data.get("workflow_runs") or []:
-            key = run.get("name") or run.get("workflow_id")
+            wid = run.get("workflow_id")
+            if active is not None and wid not in active:
+                continue  # workflow deleted or disabled since this run
+            key = wid if wid is not None else run.get("name")
             current = newest.get(key)
-            # Compare on completion time, which is what "latest state" means.
             if current is None or _ts(run.get("updated_at")) > _ts(
                 current.get("updated_at")
             ):
+                run = {
+                    **run,
+                    "_name": (active or {}).get(wid) or run.get("name") or "unnamed",
+                }
                 newest[key] = run
         return list(newest.values())
 
@@ -321,7 +368,7 @@ def collect(
 
         workflows = tuple(
             WorkflowRun(
-                name=r.get("name") or "unnamed",
+                name=r.get("_name") or r.get("name") or "unnamed",
                 conclusion=r.get("conclusion") or "",
                 finished_at=_ts(r.get("updated_at")),
                 duration=max(
