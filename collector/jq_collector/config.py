@@ -65,6 +65,11 @@ class Config:
         os.environ.get("JQ_INCLUDE_ARCHIVED", "false").lower() == "true"
     )
 
+    # Drop private repos entirely - not just their details, but their existence.
+    # For a board served world-readable, a private repo's name, its workflow
+    # names, its PR titles and its local branch names are all disclosure.
+    public_only: bool = os.environ.get("JQ_PUBLIC_ONLY", "false").lower() == "true"
+
     @property
     def owners(self) -> frozenset[str]:
         """Every owner we might accept a clone from, lowercased."""

@@ -232,6 +232,59 @@ repo whose default branch had moved. `jq_github_rate_limit_remaining` is on the 
 headroom is visible rather than assumed. Lower `JQ_GITHUB_INTERVAL` only if that
 number stays comfortable.
 
+## Serving it world-readable
+
+The default stack is a private, loopback-only tool. Making it public needs two
+separate things — clean **data** and a locked-down **access mode** — and getting
+only the first right leaks.
+
+**1. Data.** `JQ_PUBLIC_ONLY=true` (already set in `.env`) drops private repos
+completely: not just their details, but their existence. A private repo's name,
+its workflow names, its PR titles and its local branch names are all disclosure.
+Purge whatever was collected before you set it:
+
+```bash
+./scripts/purge-repo.sh Jebel-Quant/some-private-repo ...
+```
+
+**2. Access mode.** Purging is not enough on its own. With anonymous access on,
+a visitor can POST arbitrary PromQL to `/api/ds/query` and read the raw label
+index through `/api/datasources/proxy` — and **purged names linger in that index
+for hours**, until head compaction. Measured on this stack: after deleting all
+seven private repos, the index still returned every one of their names, and a
+restart did not clear them.
+
+So serve it through Grafana's public-dashboard link, which runs only that one
+dashboard's queries and exposes no datasource:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.public.yml up -d
+./scripts/check-public-safe.sh          # must pass before you expose anything
+```
+
+The overlay turns anonymous access off and public dashboards on. The preflight
+verifies every exported repo really is public *on GitHub* (not merely labelled
+so here), that anonymous queries and the datasource proxy are both refused, and
+that Prometheus and the collector are still loopback-only. It exits non-zero if
+not.
+
+Then open the board as `admin`, *Share → Public dashboard*, and share only that
+link. Verified behaviour: the public link and its own panel queries return 200;
+`/api/search`, `/api/ds/query` and the datasource proxy all return 401.
+
+**Public dashboards do not resolve template variables**, so the `$repo` picker
+would leave every panel showing "No data". `scripts/make-public-dashboard.py`
+generates `fleet-public.json` from `fleet.json` with the variable and its
+selectors stripped — equivalent queries, because the collector is already
+restricted to public repos. Re-run it after changing `fleet.json`.
+
+Nothing is on the internet until you put it there. The public URL is still only
+reachable on `localhost` — a tunnel (Cloudflare, Tailscale Funnel) or a host with
+a public address is a separate, deliberate step.
+
+To go back to the convenient local setup, drop the overlay:
+`docker compose up -d`.
+
 ## Alerting
 
 Six rules are provisioned into the `Jebel-Quant` folder, each multi-dimensional
