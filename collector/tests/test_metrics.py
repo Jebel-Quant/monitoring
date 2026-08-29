@@ -82,3 +82,48 @@ def test_excluded_repos_produce_no_series():
     lines = expose(snap)
     assert not [ln for ln in lines if "o/drop" in ln], "excluded repo leaked into the exposition"
     assert [ln for ln in lines if "o/keep" in ln]
+
+
+def test_merged_pull_requests_are_one_series_each_keyed_on_merge_time():
+    """The board takes topk() over the value, so it must be the merge time."""
+    from jq_collector.state import MergedPull
+
+    snap = Snapshot(
+        remote={
+            "o/r": RemoteRepo(
+                name="r",
+                owner="o",
+                ci_conclusion="success",
+                workflows=(wf("CI", "success"),),
+                merged=(
+                    MergedPull(
+                        number=7, title="add thing", author="tschm", merged_at=100.0, url=""
+                    ),
+                    MergedPull(number=8, title="fix thing", author="bot", merged_at=200.0, url=""),
+                ),
+            )
+        }
+    )
+    lines = [x for x in expose(snap) if x.startswith("jq_merged_pull_request_timestamp_seconds")]
+    assert len(lines) == 2
+    assert any('number="8"' in x and x.endswith(" 200.0") for x in lines)
+
+
+def test_a_merged_pr_reported_twice_yields_one_series():
+    """Duplicate label sets are dropped silently by Prometheus."""
+    from jq_collector.state import MergedPull
+
+    dupe = MergedPull(number=7, title="add thing", author="tschm", merged_at=100.0, url="")
+    snap = Snapshot(
+        remote={
+            "o/r": RemoteRepo(
+                name="r",
+                owner="o",
+                ci_conclusion="success",
+                workflows=(wf("CI", "success"),),
+                merged=(dupe, dupe),
+            )
+        }
+    )
+    lines = [x for x in expose(snap) if x.startswith("jq_merged_pull_request_timestamp_seconds")]
+    assert len(lines) == 1

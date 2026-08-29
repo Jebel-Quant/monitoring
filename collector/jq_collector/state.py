@@ -35,6 +35,17 @@ class WorkflowRun:
 
 
 @dataclass(frozen=True)
+class MergedPull:
+    """A pull request that landed. Immutable once merged, unlike an open one."""
+
+    number: int
+    title: str
+    author: str
+    merged_at: float
+    url: str
+
+
+@dataclass(frozen=True)
 class RemoteRepo:
     """What GitHub says about a repo."""
 
@@ -68,6 +79,7 @@ class RemoteRepo:
     # may hold fewer, so the tile stays right even on a repo with a PR flood.
     open_pulls_total: int = 0
     pulls: tuple[PullRequest, ...] = ()
+    merged: tuple[MergedPull, ...] = ()
 
 
 @dataclass(frozen=True)

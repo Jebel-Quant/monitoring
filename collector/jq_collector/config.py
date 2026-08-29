@@ -58,6 +58,11 @@ class Config:
     # check runs. Cap it so a runaway repo cannot exhaust the hourly budget.
     max_prs_per_repo: int = _int("JQ_MAX_PRS_PER_REPO", 20)
 
+    # Merged pull requests kept per repo. The board shows the newest N across
+    # the whole fleet, so this must be at least that N or a burst in one repo
+    # could crowd out entries the fleet-wide list should have shown.
+    recent_merges_per_repo: int = _int("JQ_RECENT_MERGES_PER_REPO", 10)
+
     # Repos to leave out, as bare names or as owner/name.
     ignore: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_IGNORE"))
 

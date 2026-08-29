@@ -17,7 +17,7 @@ from datetime import datetime
 import httpx
 
 from .config import Config
-from .state import PullRequest, RemoteRepo, WorkflowRun
+from .state import MergedPull, PullRequest, RemoteRepo, WorkflowRun
 
 log = logging.getLogger(__name__)
 
@@ -290,6 +290,37 @@ class GitHub:
             )
         return total, pulls
 
+    def recent_merges(self, full_name: str, limit: int) -> list[MergedPull]:
+        """The most recently merged pull requests, newest first.
+
+        Closed and merged are not the same thing - a closed PR may simply have
+        been abandoned - so anything without a merged_at is dropped. GitHub
+        sorts by update time rather than merge time, which are usually but not
+        always the same order, so they are re-sorted here.
+        """
+        raw = self._json(
+            f"/repos/{full_name}/pulls",
+            state="closed",
+            sort="updated",
+            direction="desc",
+            per_page=limit * 2,  # closed-but-unmerged ones get filtered out
+        )
+        if not isinstance(raw, list):
+            return []
+        merged = [
+            MergedPull(
+                number=int(item.get("number", 0)),
+                title=(item.get("title") or "")[:120],
+                author=((item.get("user") or {}).get("login")) or "unknown",
+                merged_at=_ts(item.get("merged_at")),
+                url=item.get("html_url") or "",
+            )
+            for item in raw
+            if item.get("merged_at")
+        ]
+        merged.sort(key=lambda m: m.merged_at, reverse=True)
+        return merged[:limit]
+
     def checks_state(self, full_name: str, sha: str) -> str:
         """Roll a commit's check runs up to one word.
 
@@ -396,6 +427,7 @@ def collect(
         representative = failing[0] if failing else (rest[0] if rest else None)
 
         pulls_total, pulls = api.open_pulls(full_name)
+        merged = api.recent_merges(full_name, cfg.recent_merges_per_repo)
         # GitHub's open_issues_count includes pull requests; subtract them to
         # get the number a human means by "open issues". No extra API call.
         open_issues = max(0, int(raw.get("open_issues_count") or 0) - pulls_total)
@@ -420,6 +452,7 @@ def collect(
             open_issues=open_issues,
             open_pulls_total=pulls_total,
             pulls=tuple(pulls),
+            merged=tuple(merged),
         )
 
     result: dict[str, RemoteRepo] = {}
