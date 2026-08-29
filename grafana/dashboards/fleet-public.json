@@ -35,87 +35,13 @@
       "panels": []
     },
     {
-      "id": 200,
-      "type": "stat",
-      "title": "FLEET STATUS",
-      "description": "Every red workflow, drifted repo and failing pull request, added up.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_ci_last_run_success == bool 0) + sum(jq_rhiza_releases_behind > bool 0) + sum(jq_open_pull_requests_failing)",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "textMode": "value",
-        "justifyMode": "center",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {
-          "valueSize": 110
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "ALL CLEAR",
-                  "index": 0
-                }
-              }
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ca30c",
-                "value": null
-              },
-              {
-                "color": "#fab219",
-                "value": 1
-              },
-              {
-                "color": "#d03b3b",
-                "value": 5
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 1,
-        "w": 9,
-        "h": 8
-      }
-    },
-    {
       "type": "stat",
       "title": "Repos monitored",
       "gridPos": {
-        "x": 9,
+        "x": 0,
         "y": 1,
-        "w": 5,
-        "h": 4
+        "w": 4,
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -139,9 +65,9 @@
           "fields": "",
           "values": false
         },
-        "justifyMode": "center",
+        "justifyMode": "auto",
         "text": {
-          "valueSize": 44,
+          "valueSize": 48,
           "titleSize": 13
         }
       },
@@ -158,10 +84,10 @@
       "type": "stat",
       "title": "Open PRs",
       "gridPos": {
-        "x": 14,
+        "x": 4,
         "y": 1,
-        "w": 5,
-        "h": 4
+        "w": 4,
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -185,9 +111,9 @@
           "fields": "",
           "values": false
         },
-        "justifyMode": "center",
+        "justifyMode": "auto",
         "text": {
-          "valueSize": 44,
+          "valueSize": 48,
           "titleSize": 13
         }
       },
@@ -205,10 +131,10 @@
       "type": "stat",
       "title": "Open issues",
       "gridPos": {
-        "x": 19,
+        "x": 8,
         "y": 1,
-        "w": 5,
-        "h": 4
+        "w": 4,
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -232,9 +158,9 @@
           "fields": "",
           "values": false
         },
-        "justifyMode": "center",
+        "justifyMode": "auto",
         "text": {
-          "valueSize": 44,
+          "valueSize": 48,
           "titleSize": 13
         }
       },
@@ -253,10 +179,10 @@
       "title": "CI red on main",
       "description": "Repos whose last completed run on the default branch did not pass.",
       "gridPos": {
-        "x": 9,
-        "y": 5,
-        "w": 5,
-        "h": 4
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -270,7 +196,7 @@
         }
       ],
       "options": {
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "area",
         "textMode": "value",
         "reduceOptions": {
@@ -280,9 +206,9 @@
           "fields": "",
           "values": false
         },
-        "justifyMode": "center",
+        "justifyMode": "auto",
         "text": {
-          "valueSize": 56,
+          "valueSize": 48,
           "titleSize": 13
         }
       },
@@ -313,10 +239,10 @@
       "title": "Behind template",
       "description": "Repos pinned to a template release older than the newest one.",
       "gridPos": {
-        "x": 14,
-        "y": 5,
-        "w": 5,
-        "h": 4
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -330,7 +256,7 @@
         }
       ],
       "options": {
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "area",
         "textMode": "value",
         "reduceOptions": {
@@ -340,9 +266,9 @@
           "fields": "",
           "values": false
         },
-        "justifyMode": "center",
+        "justifyMode": "auto",
         "text": {
-          "valueSize": 56,
+          "valueSize": 48,
           "titleSize": 13
         }
       },
@@ -376,10 +302,10 @@
       "type": "stat",
       "title": "PRs with red checks",
       "gridPos": {
-        "x": 19,
-        "y": 5,
-        "w": 5,
-        "h": 4
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -393,7 +319,7 @@
         }
       ],
       "options": {
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "area",
         "textMode": "value",
         "reduceOptions": {
@@ -403,9 +329,9 @@
           "fields": "",
           "values": false
         },
-        "justifyMode": "center",
+        "justifyMode": "auto",
         "text": {
-          "valueSize": 56,
+          "valueSize": 48,
           "titleSize": 13
         }
       },
@@ -437,7 +363,7 @@
       "description": "How long since the collector last refreshed, worst of its two sources. This machine's Docker pauses when the Mac sleeps, so nothing is collected then - an amber or red value here means the numbers above are from before the last sleep, and panels can read 'No data' entirely once the gap passes Prometheus's 5-minute staleness window.",
       "gridPos": {
         "x": 0,
-        "y": 9,
+        "y": 6,
         "w": 24,
         "h": 3
       },
@@ -453,7 +379,7 @@
         }
       ],
       "options": {
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "area",
         "textMode": "value",
         "reduceOptions": {
@@ -463,9 +389,9 @@
           "fields": "",
           "values": false
         },
-        "justifyMode": "center",
+        "justifyMode": "auto",
         "text": {
-          "valueSize": 44,
+          "valueSize": 48,
           "titleSize": 13
         }
       },
@@ -497,12 +423,114 @@
     },
     {
       "type": "row",
+      "title": "Trend and CI history",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "collapsed": false,
+      "id": 11,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Open problems by kind",
+      "description": "How many repos are in each bad state over time. Three distinct kinds, so the colours carry identity, not severity.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_ci_last_run_success == bool 0)",
+          "legendFormat": "CI red on main"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(jq_rhiza_releases_behind > bool 0)",
+          "legendFormat": "Behind template"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "pointSize": 8,
+            "spanNulls": true,
+            "axisGridShow": true,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CI red on main"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Behind template"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "id": 12
+    },
+    {
+      "type": "row",
       "title": "Template drift",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 12
+        "y": 18
       },
       "collapsed": false,
       "id": 8,
@@ -516,7 +544,7 @@
         "h": 13,
         "w": 10,
         "x": 0,
-        "y": 13
+        "y": 19
       },
       "datasource": {
         "type": "prometheus",
@@ -591,7 +619,7 @@
         "h": 13,
         "w": 14,
         "x": 10,
-        "y": 13
+        "y": 19
       },
       "datasource": {
         "type": "prometheus",
@@ -714,204 +742,12 @@
     },
     {
       "type": "row",
-      "title": "Trend and CI history",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 26
-      },
-      "collapsed": false,
-      "id": 11,
-      "panels": []
-    },
-    {
-      "type": "timeseries",
-      "title": "Open problems by kind",
-      "description": "How many repos are in each bad state over time. Three distinct kinds, so the colours carry identity, not severity.",
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 27
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_ci_last_run_success == bool 0)",
-          "legendFormat": "CI red on main"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(jq_rhiza_releases_behind > bool 0)",
-          "legendFormat": "Behind template"
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "pointSize": 8,
-            "spanNulls": true,
-            "axisGridShow": true,
-            "axisBorderShow": false
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "CI red on main"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3987e5"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Behind template"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#d95926"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "id": 12
-    },
-    {
-      "type": "state-timeline",
-      "title": "CI on the default branch, per repo",
-      "description": "One row per repo; green means the last completed run on the default branch passed. Owner prefixes are stripped for legibility - repo names are unique across the monitored orgs. Gaps are windows where the collector was not running.",
-      "gridPos": {
-        "h": 20,
-        "w": 24,
-        "x": 0,
-        "y": 35
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "jq_ci_last_run_success",
-          "legendFormat": "{{repo}}",
-          "range": true,
-          "instant": false
-        }
-      ],
-      "options": {
-        "showValue": "never",
-        "rowHeight": 0.7,
-        "mergeValues": true,
-        "alignValue": "left",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "lineWidth": 0,
-            "fillOpacity": 90
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "Failing",
-                  "index": 0
-                },
-                "1": {
-                  "text": "Passing",
-                  "index": 1
-                }
-              }
-            }
-          ],
-          "noValue": "no run",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#d03b3b",
-                "value": null
-              },
-              {
-                "color": "#0ca30c",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "id": 13,
-      "transformations": [
-        {
-          "id": "renameByRegex",
-          "options": {
-            "regex": "^[^/]+/(.*)$",
-            "renamePattern": "$1"
-          }
-        }
-      ]
-    },
-    {
-      "type": "row",
       "title": "Detail",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 55
+        "y": 32
       },
       "collapsed": false,
       "id": 14,
@@ -924,7 +760,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 33
       },
       "datasource": {
         "type": "prometheus",
@@ -1168,7 +1004,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 70
+        "y": 47
       },
       "datasource": {
         "type": "prometheus",
@@ -1422,7 +1258,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 82
+        "y": 59
       },
       "collapsed": false,
       "panels": []
@@ -1436,7 +1272,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 83
+        "y": 60
       },
       "datasource": {
         "type": "prometheus",
@@ -1555,7 +1391,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 95
+        "y": 72
       },
       "datasource": {
         "type": "prometheus",
@@ -1671,7 +1507,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 107
+        "y": 84
       },
       "datasource": {
         "type": "prometheus",
@@ -1837,7 +1673,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 119
+        "y": 96
       },
       "datasource": {
         "type": "prometheus",
@@ -1948,7 +1784,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 131
+        "y": 108
       },
       "collapsed": false,
       "id": 526,
@@ -1961,7 +1797,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 132
+        "y": 109
       },
       "datasource": {
         "type": "prometheus",
@@ -2018,7 +1854,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 132
+        "y": 109
       },
       "datasource": {
         "type": "prometheus",
@@ -2074,7 +1910,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 132
+        "y": 109
       },
       "datasource": {
         "type": "prometheus",
