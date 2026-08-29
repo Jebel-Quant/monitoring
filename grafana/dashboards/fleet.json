@@ -748,103 +748,13 @@
       "id": 12
     },
     {
-      "type": "state-timeline",
-      "title": "CI on the default branch, per repo",
-      "description": "One row per repo; green means the last completed run on the default branch passed. Owner prefixes are stripped for legibility - repo names are unique across the monitored orgs. Gaps are windows where the collector was not running.",
-      "gridPos": {
-        "h": 20,
-        "w": 24,
-        "x": 0,
-        "y": 20
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "jq_ci_last_run_success{repo=~\"$repo\"}",
-          "legendFormat": "{{repo}}",
-          "range": true,
-          "instant": false
-        }
-      ],
-      "options": {
-        "showValue": "never",
-        "rowHeight": 0.7,
-        "mergeValues": true,
-        "alignValue": "left",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "lineWidth": 0,
-            "fillOpacity": 90
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "Failing",
-                  "index": 0
-                },
-                "1": {
-                  "text": "Passing",
-                  "index": 1
-                }
-              }
-            }
-          ],
-          "noValue": "no run",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#d03b3b",
-                "value": null
-              },
-              {
-                "color": "#0ca30c",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "id": 13,
-      "transformations": [
-        {
-          "id": "renameByRegex",
-          "options": {
-            "regex": "^[^/]+/(.*)$",
-            "renamePattern": "$1"
-          }
-        }
-      ]
-    },
-    {
       "type": "row",
       "title": "Template drift",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 20
       },
       "collapsed": false,
       "panels": [],
@@ -858,7 +768,7 @@
         "h": 13,
         "w": 10,
         "x": 0,
-        "y": 41
+        "y": 21
       },
       "datasource": {
         "type": "prometheus",
@@ -933,7 +843,7 @@
         "h": 13,
         "w": 14,
         "x": 10,
-        "y": 41
+        "y": 21
       },
       "datasource": {
         "type": "prometheus",
@@ -1061,7 +971,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 54
+        "y": 34
       },
       "collapsed": false,
       "panels": [],
@@ -1074,7 +984,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 55
+        "y": 35
       },
       "datasource": {
         "type": "prometheus",
@@ -1318,7 +1228,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 49
       },
       "datasource": {
         "type": "prometheus",
@@ -1572,7 +1482,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 81
+        "y": 61
       },
       "datasource": {
         "type": "prometheus",
@@ -1870,7 +1780,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 97
+        "y": 77
       },
       "collapsed": true,
       "panels": [
@@ -2730,7 +2640,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 98
+        "y": 78
       },
       "collapsed": true,
       "panels": [
