@@ -1,0 +1,38 @@
+# TLS overlay for the server stack:
+#
+#   docker compose -f docker-compose.server.yml -f docker-compose.tls.yml up -d
+#
+# Puts Caddy in front and stops publishing Grafana directly, so 3000 is no
+# longer reachable from outside and the admin login never crosses the internet
+# in clear. Caddy obtains and renews the certificate itself; it needs 80 open
+# as well as 443 for the ACME HTTP-01 challenge and the HTTPS redirect.
+# `!override` needs Compose v2.24.4+ (any current Docker Engine has it). Without
+# it, compose would MERGE the ports lists and Grafana would keep publishing 3000
+# alongside Caddy, defeating the point.
+services:
+  grafana:
+    # Reachable only on the compose network now - Caddy is the way in.
+    ports: !override []
+    environment:
+      GF_SERVER_ROOT_URL: https://${FLEET_DOMAIN:?set FLEET_DOMAIN, e.g. fleet.example.com}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      FLEET_DOMAIN: ${FLEET_DOMAIN:?}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL for Let us Encrypt expiry notices}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data      # certificates live here - keep this volume
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"         # HTTP/3
+    depends_on:
+      - grafana
+
+volumes:
+  caddy-data:
+  caddy-config:

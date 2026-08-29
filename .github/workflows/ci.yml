@@ -63,6 +63,7 @@ jobs:
     # required variable in the base file; any value satisfies interpolation.
     env:
       GITHUB_TOKEN: dummy-value-for-interpolation-only
+      GF_ADMIN_PASSWORD: dummy-value-for-interpolation-only
     steps:
       - uses: actions/checkout@v4
       - name: Base
@@ -71,3 +72,10 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.admin.yml config --quiet
       - name: Base + public overlay
         run: docker compose -f docker-compose.yml -f docker-compose.public.yml config --quiet
+      - name: Server stack
+        run: docker compose -f docker-compose.server.yml config --quiet
+      - name: Server + TLS overlay
+        env:
+          FLEET_DOMAIN: fleet.example.com
+          ACME_EMAIL: ci@example.com
+        run: docker compose -f docker-compose.server.yml -f docker-compose.tls.yml config --quiet

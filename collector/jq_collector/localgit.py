@@ -177,6 +177,10 @@ def scan(
     after the GitHub half had stopped reporting it.
     """
     found: dict[str, LocalRepo] = {}
+    if not cfg.repo_root:
+        # Deliberate: on a server there are no working copies to report on, and
+        # an empty result is the honest answer rather than an error every minute.
+        return found
     if not os.path.isdir(cfg.repo_root):
         log.error("repo root %s is not a directory", cfg.repo_root)
         return found
