@@ -324,15 +324,28 @@ A €4/month Hetzner CX22, a DigitalOcean droplet or a Lightsail instance are al
 comfortably big enough; the whole stack idles under 500 MB.
 
 ```bash
-# on the server, as a non-root user in the docker group
 git clone https://github.com/Jebel-Quant/monitoring.git && cd monitoring
 
-export GITHUB_TOKEN=github_pat_...     # public_repo scope is enough
-export GF_ADMIN_PASSWORD="$(openssl rand -base64 24)"   # keep this somewhere
-docker compose -f docker-compose.server.yml up -d
+cat > .env <<'SETTINGS'
+GITHUB_TOKEN=github_pat_...        # public_repo scope is enough
+GF_ADMIN_PASSWORD=...              # 16+ chars; openssl rand -base64 24
+FLEET_DOMAIN=fleet.example.com
+ACME_EMAIL=you@example.com
+# Repos outside the swept org. Leave this out and they are silently absent -
+# the board simply reports a smaller fleet, with nothing to say it is short.
+JQ_REPOS=cvxgrp/cvxrisk,cvxgrp/simulator,cvxgrp/cvxcla,cvxgrp/cvxmarkowitz
+SETTINGS
+chmod 600 .env
 
-./scripts/check-public-safe.sh          # must pass before sharing anything
+./scripts/bootstrap-server.sh      # checks everything, then starts the stack
 ```
+
+A `.env` rather than `export`, so the settings survive a reboot - compose reads
+it automatically, and it is gitignored.
+
+Note the token has to be able to read every repo named in `JQ_REPOS`. A
+fine-grained token scoped to one org cannot see another's, and the collector
+logs `named repo ... is not readable` when that happens.
 
 Then reach Grafana, sign in as `admin`, open **Jebel-Quant Fleet (public)** →
 *Share* → *Public dashboard*, and share only that link.
