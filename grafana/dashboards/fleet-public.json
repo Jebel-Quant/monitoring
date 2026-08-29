@@ -31,17 +31,91 @@
         "y": 0
       },
       "collapsed": false,
-      "panels": [],
-      "id": 1
+      "id": 1,
+      "panels": []
+    },
+    {
+      "id": 200,
+      "type": "stat",
+      "title": "FLEET STATUS",
+      "description": "Every red workflow, drifted repo and failing pull request, added up.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_ci_last_run_success == bool 0) + sum(jq_rhiza_releases_behind > bool 0) + sum(jq_open_pull_requests_failing)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "valueSize": 110
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "ALL CLEAR",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 1
+              },
+              {
+                "color": "#d03b3b",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 9,
+        "h": 8
+      }
     },
     {
       "type": "stat",
       "title": "Repos monitored",
       "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 0,
-        "y": 1
+        "x": 9,
+        "y": 1,
+        "w": 5,
+        "h": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -56,7 +130,7 @@
       ],
       "options": {
         "colorMode": "none",
-        "graphMode": "none",
+        "graphMode": "area",
         "textMode": "value",
         "reduceOptions": {
           "calcs": [
@@ -64,6 +138,11 @@
           ],
           "fields": "",
           "values": false
+        },
+        "justifyMode": "center",
+        "text": {
+          "valueSize": 44,
+          "titleSize": 13
         }
       },
       "fieldConfig": {
@@ -77,13 +156,107 @@
     },
     {
       "type": "stat",
+      "title": "Open PRs",
+      "gridPos": {
+        "x": 14,
+        "y": 1,
+        "w": 5,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_open_pull_requests)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "justifyMode": "center",
+        "text": {
+          "valueSize": 44,
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "description": "Open pull requests across the fleet, counted before any per-repo clipping.",
+      "id": 531
+    },
+    {
+      "type": "stat",
+      "title": "Open issues",
+      "gridPos": {
+        "x": 19,
+        "y": 1,
+        "w": 5,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_open_issues)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "justifyMode": "center",
+        "text": {
+          "valueSize": 44,
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "description": "Open issues across the fleet, excluding pull requests - GitHub's own open_issues_count lumps the two together, so PRs are subtracted out.",
+      "id": 532
+    },
+    {
+      "type": "stat",
       "title": "CI red on main",
       "description": "Repos whose last completed run on the default branch did not pass.",
       "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 12,
-        "y": 1
+        "x": 9,
+        "y": 5,
+        "w": 5,
+        "h": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -97,7 +270,7 @@
         }
       ],
       "options": {
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "area",
         "textMode": "value",
         "reduceOptions": {
@@ -106,6 +279,11 @@
           ],
           "fields": "",
           "values": false
+        },
+        "justifyMode": "center",
+        "text": {
+          "valueSize": 56,
+          "titleSize": 13
         }
       },
       "fieldConfig": {
@@ -124,14 +302,7 @@
                 "value": 1
               }
             ]
-          },
-          "links": [
-            {
-              "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet-public/jebel-quant-fleet-public?viewPanel=101&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
+          }
         },
         "overrides": []
       },
@@ -142,10 +313,10 @@
       "title": "Behind template",
       "description": "Repos pinned to a template release older than the newest one.",
       "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 16,
-        "y": 1
+        "x": 14,
+        "y": 5,
+        "w": 5,
+        "h": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -159,7 +330,7 @@
         }
       ],
       "options": {
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "area",
         "textMode": "value",
         "reduceOptions": {
@@ -168,6 +339,11 @@
           ],
           "fields": "",
           "values": false
+        },
+        "justifyMode": "center",
+        "text": {
+          "valueSize": 56,
+          "titleSize": 13
         }
       },
       "fieldConfig": {
@@ -190,14 +366,7 @@
                 "value": 5
               }
             ]
-          },
-          "links": [
-            {
-              "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet-public/jebel-quant-fleet-public?viewPanel=102&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
+          }
         },
         "overrides": []
       },
@@ -207,10 +376,10 @@
       "type": "stat",
       "title": "PRs with red checks",
       "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 20,
-        "y": 1
+        "x": 19,
+        "y": 5,
+        "w": 5,
+        "h": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -224,7 +393,7 @@
         }
       ],
       "options": {
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "area",
         "textMode": "value",
         "reduceOptions": {
@@ -233,6 +402,11 @@
           ],
           "fields": "",
           "values": false
+        },
+        "justifyMode": "center",
+        "text": {
+          "valueSize": 56,
+          "titleSize": 13
         }
       },
       "fieldConfig": {
@@ -251,18 +425,75 @@
                 "value": 1
               }
             ]
-          },
-          "links": [
-            {
-              "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet-public/jebel-quant-fleet-public?viewPanel=104&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
+          }
         },
         "overrides": []
       },
       "id": 6
+    },
+    {
+      "type": "stat",
+      "title": "Data age",
+      "description": "How long since the collector last refreshed, worst of its two sources. This machine's Docker pauses when the Mac sleeps, so nothing is collected then - an amber or red value here means the numbers above are from before the last sleep, and panels can read 'No data' entirely once the gap passes Prometheus's 5-minute staleness window.",
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - min(jq_collector_last_success_timestamp_seconds)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "justifyMode": "center",
+        "text": {
+          "valueSize": 44,
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 600
+              },
+              {
+                "color": "#d03b3b",
+                "value": 1800
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 19
     },
     {
       "type": "row",
@@ -271,11 +502,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 12
       },
       "collapsed": false,
-      "panels": [],
-      "id": 8
+      "id": 8,
+      "panels": []
     },
     {
       "type": "bargauge",
@@ -285,7 +516,7 @@
         "h": 13,
         "w": 10,
         "x": 0,
-        "y": 12
+        "y": 13
       },
       "datasource": {
         "type": "prometheus",
@@ -360,7 +591,7 @@
         "h": 13,
         "w": 14,
         "x": 10,
-        "y": 12
+        "y": 13
       },
       "datasource": {
         "type": "prometheus",
@@ -488,11 +719,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 26
       },
       "collapsed": false,
-      "panels": [],
-      "id": 11
+      "id": 11,
+      "panels": []
     },
     {
       "type": "timeseries",
@@ -502,7 +733,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 27
       },
       "datasource": {
         "type": "prometheus",
@@ -591,7 +822,7 @@
         "h": 20,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 35
       },
       "datasource": {
         "type": "prometheus",
@@ -680,11 +911,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 54
+        "y": 55
       },
       "collapsed": false,
-      "panels": [],
-      "id": 14
+      "id": 14,
+      "panels": []
     },
     {
       "type": "table",
@@ -693,7 +924,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 55
+        "y": 56
       },
       "datasource": {
         "type": "prometheus",
@@ -937,7 +1168,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 70
       },
       "datasource": {
         "type": "prometheus",
@@ -1186,530 +1417,529 @@
     {
       "id": 100,
       "type": "row",
-      "title": "Drill-down (click a tile above)",
+      "title": "Detail by repo",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 81
+        "y": 82
       },
-      "collapsed": true,
-      "panels": [
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 101,
+      "type": "table",
+      "title": "Failing workflows on the default branch",
+      "description": "One row per failing workflow, not per repo - a repo can have more than one red workflow, so this list can be longer than the 'CI red on main' tile, which counts repos.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 83
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
         {
-          "id": 101,
-          "type": "table",
-          "title": "Failing workflows on the default branch",
-          "description": "One row per failing workflow, not per repo - a repo can have more than one red workflow, so this list can be longer than the 'CI red on main' tile, which counts repos.",
-          "gridPos": {
-            "h": 12,
-            "w": 24,
-            "x": 0,
-            "y": 82
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "(time() - jq_ci_workflow_timestamp_seconds) and on(repo, workflow) (jq_ci_workflow_success == 0)",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true,
-                  "instance": true,
-                  "job": true,
-                  "fleet": true
-                },
-                "indexByName": {
-                  "repo": 0,
-                  "workflow": 1,
-                  "Value": 2
-                },
-                "renameByName": {
-                  "repo": "Repo",
-                  "workflow": "Workflow",
-                  "Value": "Failing since"
-                }
-              }
-            },
-            {
-              "id": "sortBy",
-              "options": {
-                "sort": [
-                  {
-                    "field": "Failing since",
-                    "desc": true
-                  }
-                ]
-              }
-            }
-          ],
+          "refId": "A",
+          "expr": "(time() - jq_ci_workflow_timestamp_seconds) and on(repo, workflow) (jq_ci_workflow_success == 0)",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
           "options": {
-            "showHeader": true,
-            "footer": {
-              "show": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "cellOptions": {
-                  "type": "auto"
-                }
-              }
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "fleet": true
             },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Repo"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 260
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Open Actions on GitHub",
-                        "url": "https://github.com/${__value.text}/actions",
-                        "targetBlank": true
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Failing since"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "s"
-                  },
-                  {
-                    "id": "custom.align",
-                    "value": "right"
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 160
-                  }
-                ]
-              }
-            ]
+            "indexByName": {
+              "repo": 0,
+              "workflow": 1,
+              "Value": 2
+            },
+            "renameByName": {
+              "repo": "Repo",
+              "workflow": "Workflow",
+              "Value": "Failing since"
+            }
           }
         },
         {
-          "id": 102,
-          "type": "table",
-          "title": "Repos behind the template",
-          "description": "Every repo pinned to an older template release. Matches the 'Behind template' tile.",
-          "gridPos": {
-            "h": 12,
-            "w": 24,
-            "x": 0,
-            "y": 94
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "(jq_rhiza_releases_behind > 0) * on(repo) group_left(ref) topk by (repo) (1, jq_rhiza_template_ref_info)",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true,
-                  "instance": true,
-                  "job": true,
-                  "fleet": true,
-                  "Value": false
-                },
-                "indexByName": {
-                  "repo": 0,
-                  "ref": 1,
-                  "Value": 2
-                },
-                "renameByName": {
-                  "repo": "Repo",
-                  "ref": "Pinned ref",
-                  "Value": "Releases behind"
-                }
-              }
-            },
-            {
-              "id": "sortBy",
-              "options": {
-                "sort": [
-                  {
-                    "field": "Releases behind",
-                    "desc": true
-                  }
-                ]
-              }
-            }
-          ],
+          "id": "sortBy",
           "options": {
-            "showHeader": true,
-            "footer": {
-              "show": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "cellOptions": {
-                  "type": "auto"
-                }
-              }
-            },
-            "overrides": [
+            "sort": [
               {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Repo"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 260
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
-                        "targetBlank": true
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Releases behind"
-                },
-                "properties": [
-                  {
-                    "id": "custom.align",
-                    "value": "right"
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 160
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 104,
-          "type": "table",
-          "title": "Open pull requests with red checks",
-          "description": "Matches the 'PRs with red checks' tile.",
-          "gridPos": {
-            "h": 12,
-            "w": 24,
-            "x": 0,
-            "y": 106
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "(time() - jq_pull_request_created_timestamp_seconds) * on(repo, number) group_left(title, author, checks) topk by (repo, number) (1, jq_pull_request_info{checks=~\"failure|cancelled\"})",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true,
-                  "instance": true,
-                  "job": true,
-                  "fleet": true,
-                  "Value": false
-                },
-                "indexByName": {
-                  "repo": 0,
-                  "number": 1,
-                  "title": 2,
-                  "author": 3,
-                  "checks": 4,
-                  "Value": 5
-                },
-                "renameByName": {
-                  "repo": "Repo",
-                  "number": "#",
-                  "title": "Title",
-                  "author": "Author",
-                  "checks": "Checks",
-                  "Value": "Age"
-                }
-              }
-            },
-            {
-              "id": "sortBy",
-              "options": {
-                "sort": [
-                  {
-                    "field": "Age",
-                    "desc": true
-                  }
-                ]
-              }
-            }
-          ],
-          "options": {
-            "showHeader": true,
-            "footer": {
-              "show": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "cellOptions": {
-                  "type": "auto"
-                }
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Repo"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 260
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Open the repo's pull requests on GitHub",
-                        "url": "https://github.com/${__value.text}/pulls",
-                        "targetBlank": true
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Age"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "s"
-                  },
-                  {
-                    "id": "custom.align",
-                    "value": "right"
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 140
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "#"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 70
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Open this pull request on GitHub",
-                        "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
-                        "targetBlank": true
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Title"
-                },
-                "properties": [
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Open this pull request on GitHub",
-                        "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
-                        "targetBlank": true
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": 107,
-          "type": "table",
-          "title": "Open issues by repo",
-          "description": "Repos with at least one open issue, pull requests excluded.",
-          "gridPos": {
-            "h": 12,
-            "w": 24,
-            "x": 0,
-            "y": 118
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "jq_open_issues > 0",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true,
-                  "instance": true,
-                  "job": true,
-                  "fleet": true
-                },
-                "indexByName": {
-                  "repo": 0,
-                  "Value": 1
-                },
-                "renameByName": {
-                  "repo": "Repo",
-                  "Value": "Open issues"
-                }
-              }
-            },
-            {
-              "id": "sortBy",
-              "options": {
-                "sort": [
-                  {
-                    "field": "Open issues",
-                    "desc": true
-                  }
-                ]
-              }
-            }
-          ],
-          "options": {
-            "showHeader": true,
-            "footer": {
-              "show": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "cellOptions": {
-                  "type": "auto"
-                }
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Repo"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 260
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
-                        "targetBlank": true
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Open issues"
-                },
-                "properties": [
-                  {
-                    "id": "custom.align",
-                    "value": "right"
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 150
-                  }
-                ]
+                "field": "Failing since",
+                "desc": true
               }
             ]
           }
         }
-      ]
+      ],
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Repo"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open Actions on GitHub",
+                    "url": "https://github.com/${__value.text}/actions",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failing since"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 102,
+      "type": "table",
+      "title": "Repos behind the template",
+      "description": "Every repo pinned to an older template release. Matches the 'Behind template' tile.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 95
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(jq_rhiza_releases_behind > 0) * on(repo) group_left(ref) topk by (repo) (1, jq_rhiza_template_ref_info)",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "fleet": true,
+              "Value": false
+            },
+            "indexByName": {
+              "repo": 0,
+              "ref": 1,
+              "Value": 2
+            },
+            "renameByName": {
+              "repo": "Repo",
+              "ref": "Pinned ref",
+              "Value": "Releases behind"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Releases behind",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Repo"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open on GitHub",
+                    "url": "https://github.com/${__value.text}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Releases behind"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 104,
+      "type": "table",
+      "title": "Open pull requests with red checks",
+      "description": "Matches the 'PRs with red checks' tile.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 107
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(time() - jq_pull_request_created_timestamp_seconds) * on(repo, number) group_left(title, author, checks) topk by (repo, number) (1, jq_pull_request_info{checks=~\"failure|cancelled\"})",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "fleet": true,
+              "Value": false
+            },
+            "indexByName": {
+              "repo": 0,
+              "number": 1,
+              "title": 2,
+              "author": 3,
+              "checks": 4,
+              "Value": 5
+            },
+            "renameByName": {
+              "repo": "Repo",
+              "number": "#",
+              "title": "Title",
+              "author": "Author",
+              "checks": "Checks",
+              "Value": "Age"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Age",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Repo"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open the repo's pull requests on GitHub",
+                    "url": "https://github.com/${__value.text}/pulls",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Age"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "#"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this pull request on GitHub",
+                    "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Title"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this pull request on GitHub",
+                    "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 107,
+      "type": "table",
+      "title": "Open issues by repo",
+      "description": "Repos with at least one open issue, pull requests excluded.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 119
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jq_open_issues > 0",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "fleet": true
+            },
+            "indexByName": {
+              "repo": 0,
+              "Value": 1
+            },
+            "renameByName": {
+              "repo": "Repo",
+              "Value": "Open issues"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Open issues",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Repo"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open on GitHub",
+                    "url": "https://github.com/${__value.text}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Open issues"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "type": "row",
@@ -1718,311 +1948,20 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 82
+        "y": 131
       },
-      "collapsed": true,
-      "panels": [
-        {
-          "type": "stat",
-          "title": "GitHub rate limit remaining",
-          "gridPos": {
-            "h": 5,
-            "w": 6,
-            "x": 0,
-            "y": 83
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "jq_github_rate_limit_remaining",
-              "instant": true
-            }
-          ],
-          "options": {
-            "colorMode": "value",
-            "graphMode": "area",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "#d03b3b",
-                    "value": null
-                  },
-                  {
-                    "color": "#fab219",
-                    "value": 500
-                  },
-                  {
-                    "color": "#0ca30c",
-                    "value": 1500
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "id": 527
-        },
-        {
-          "type": "stat",
-          "title": "Since last GitHub refresh",
-          "gridPos": {
-            "h": 5,
-            "w": 6,
-            "x": 6,
-            "y": 88
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "time() - jq_collector_last_success_timestamp_seconds{source=\"github\"}",
-              "instant": true
-            }
-          ],
-          "options": {
-            "colorMode": "value",
-            "graphMode": "area",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "#0ca30c",
-                    "value": null
-                  },
-                  {
-                    "color": "#fab219",
-                    "value": 900
-                  },
-                  {
-                    "color": "#d03b3b",
-                    "value": 3600
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "id": 528
-        },
-        {
-          "type": "timeseries",
-          "title": "Refresh duration",
-          "gridPos": {
-            "h": 5,
-            "w": 12,
-            "x": 12,
-            "y": 93
-          },
-          "datasource": {
-            "type": "prometheus",
-            "uid": "jq-prometheus"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "jq_collector_refresh_duration_seconds",
-              "legendFormat": "{{source}}"
-            }
-          ],
-          "options": {
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true,
-              "calcs": []
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "min": 0,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 0,
-                "showPoints": "never"
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "github"
-                },
-                "properties": [
-                  {
-                    "id": "color",
-                    "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#3987e5"
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "local"
-                },
-                "properties": [
-                  {
-                    "id": "color",
-                    "value": {
-                      "mode": "fixed",
-                      "fixedColor": "#d95926"
-                    }
-                  }
-                ]
-              }
-            ]
-          },
-          "id": 529
-        }
-      ],
-      "id": 526
+      "collapsed": false,
+      "id": 526,
+      "panels": []
     },
     {
       "type": "stat",
-      "title": "Open PRs",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 4,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_open_pull_requests)",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "none",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "links": [
-            {
-              "title": "Show the breakdown by repo",
-              "url": "/d/jq-fleet-public/jebel-quant-fleet-public?viewPanel=16&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "description": "Open pull requests across the fleet, counted before any per-repo clipping.",
-      "id": 531
-    },
-    {
-      "type": "stat",
-      "title": "Open issues",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 8,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_open_issues)",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "none",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "links": [
-            {
-              "title": "Show the breakdown by repo",
-              "url": "/d/jq-fleet-public/jebel-quant-fleet-public?viewPanel=107&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "description": "Open issues across the fleet, excluding pull requests - GitHub's own open_issues_count lumps the two together, so PRs are subtracted out.",
-      "id": 532
-    },
-    {
-      "type": "stat",
-      "title": "Data age",
-      "description": "How long since the collector last refreshed, worst of its two sources. This machine's Docker pauses when the Mac sleeps, so nothing is collected then - an amber or red value here means the numbers above are from before the last sleep, and panels can read 'No data' entirely once the gap passes Prometheus's 5-minute staleness window.",
+      "title": "GitHub rate limit remaining",
       "gridPos": {
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 6
+        "y": 132
       },
       "datasource": {
         "type": "prometheus",
@@ -2031,14 +1970,70 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "time() - min(jq_collector_last_success_timestamp_seconds)",
+          "expr": "jq_github_rate_limit_remaining",
           "instant": true
         }
       ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
-        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#d03b3b",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 500
+              },
+              {
+                "color": "#0ca30c",
+                "value": 1500
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 527
+    },
+    {
+      "type": "stat",
+      "title": "Since last GitHub refresh",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 132
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - jq_collector_last_success_timestamp_seconds{source=\"github\"}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -2050,7 +2045,6 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -2060,18 +2054,96 @@
               },
               {
                 "color": "#fab219",
-                "value": 600
+                "value": 900
               },
               {
                 "color": "#d03b3b",
-                "value": 1800
+                "value": 3600
               }
             ]
           }
         },
         "overrides": []
       },
-      "id": 19
+      "id": 528
+    },
+    {
+      "type": "timeseries",
+      "title": "Refresh duration",
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 132
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jq_collector_refresh_duration_seconds",
+          "legendFormat": "{{source}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "github"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "local"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "id": 529
     }
   ]
 }
