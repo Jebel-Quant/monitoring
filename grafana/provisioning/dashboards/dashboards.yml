@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: jebel-quant
+    orgId: 1
+    folder: Jebel-Quant
+    type: file
+    disableDeletion: false
+    # Provisioned dashboards are read-only in the UI; edit the JSON in git and
+    # Grafana picks it up within this interval.
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

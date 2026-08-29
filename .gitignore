@@ -1,0 +1,6 @@
+.env
+
+# Left behind by running the collector natively instead of in its container.
+.venv/
+.ruff_cache/
+__pycache__/

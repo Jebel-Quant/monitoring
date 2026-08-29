@@ -1,0 +1,17 @@
+# The collector serves a cached snapshot, so scraping it is cheap and fast even
+# though the underlying GitHub refresh runs every five minutes. Scraping more
+# often than the refresh just gives the graphs a finer time resolution.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    fleet: jebel-quant
+
+scrape_configs:
+  - job_name: jq-collector
+    static_configs:
+      - targets: ["collector:9109"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

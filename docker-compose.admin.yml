@@ -1,0 +1,19 @@
+# Temporary override that enables Prometheus's admin API, which can delete
+# series. Applied only for the duration of scripts/purge-repo.sh and reverted
+# immediately after.
+#
+# It is NOT left on: Grafana's datasource proxy lets any viewer - and anonymous
+# access is enabled here - reach arbitrary paths on the datasource, so a
+# permanently enabled admin API would put "delete every metric" one request
+# away from a read-only visitor.
+#
+# compose replaces `command` wholesale rather than merging, so the base flags
+# are repeated here. Keep them in step with docker-compose.yml.
+services:
+  prometheus:
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROM_RETENTION:-180d}
+      - --web.enable-lifecycle
+      - --web.enable-admin-api

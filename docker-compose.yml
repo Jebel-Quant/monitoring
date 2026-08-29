@@ -1,0 +1,75 @@
+name: jq-monitoring
+
+services:
+  collector:
+    build: ./collector
+    container_name: jq-collector
+    restart: unless-stopped
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?set GITHUB_TOKEN in monitoring/.env - scripts/up.sh does it for you}
+      # Whole-org sweeps, plus individually named repos for orgs where only
+      # some of the repos are yours.
+      JQ_ORGS: ${JQ_ORGS:-Jebel-Quant}
+      JQ_REPOS: ${JQ_REPOS:-}
+      JQ_REPO_ROOT: /repos
+      JQ_SCAN_DEPTH: ${JQ_SCAN_DEPTH:-2}
+      JQ_TEMPLATE_REPO: ${JQ_TEMPLATE_REPO:-Jebel-Quant/rhiza}
+      JQ_GITHUB_INTERVAL: ${JQ_GITHUB_INTERVAL:-300}
+      JQ_LOCAL_INTERVAL: ${JQ_LOCAL_INTERVAL:-60}
+      JQ_IGNORE: ${JQ_IGNORE:-}
+      JQ_PUBLIC_ONLY: ${JQ_PUBLIC_ONLY:-false}
+      JQ_LOG_LEVEL: ${JQ_LOG_LEVEL:-INFO}
+    volumes:
+      # The whole of ~/repos, so clones under any org folder are visible; the
+      # scan keeps only repos that are in scope. Read-only on purpose: the
+      # collector reports on your working copies and must never be able to touch
+      # them. Every git call is --no-optional-locks for the same reason.
+      - ${JQ_REPO_ROOT_HOST:-../..}:/repos:ro
+    ports:
+      - "127.0.0.1:9109:9109"
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: jq-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROM_RETENTION:-180d}
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - collector
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: jq-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-admin}
+      # A single-user board on localhost; skip the login wall but keep the
+      # anonymous role read-only so a stray click cannot edit provisioning.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: dark
+      GF_FEATURE_TOGGLES_ENABLE: ""
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      # Loopback only: anonymous access is enabled, so a 0.0.0.0 binding would
+      # serve private repo names and PR titles to the whole LAN without a
+      # password. Change to "3000:3000" only if you deliberately want that.
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:

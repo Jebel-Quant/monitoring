@@ -1,0 +1,207 @@
+apiVersion: 1
+
+# Every rule is multi-dimensional: the query returns one series per repo, so
+# Grafana raises one alert instance per repo rather than a single "something is
+# wrong" alert. The `for` durations are deliberately long - this is a fleet
+# board, not a pager, and a repo that goes red for an hour during a normal
+# push-fix cycle is not worth a notification.
+groups:
+  - orgId: 1
+    name: fleet
+    folder: Jebel-Quant
+    interval: 5m
+    rules:
+      - uid: jq-ci-red
+        title: CI red on the default branch
+        condition: C
+        for: 24h
+        labels:
+          severity: critical
+          fleet: jebel-quant
+        annotations:
+          summary: "{{ $labels.repo }} has been red on its default branch for over a day"
+          runbook: "https://github.com/{{ $labels.repo }}/actions"
+        noDataState: OK
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: jq-prometheus
+            model:
+              refId: A
+              expr: jq_ci_last_run_success
+              range: true
+              instant: false
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, reducer: last, expression: A }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: jq-template-drift
+        title: Repo behind the template
+        condition: C
+        for: 168h
+        labels:
+          severity: warning
+          fleet: jebel-quant
+        annotations:
+          summary: "{{ $labels.repo }} has been behind the template for a week ({{ $values.B }} releases)"
+          runbook: "Run /rhiza:update in the repo."
+        noDataState: OK
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: jq-prometheus
+            model:
+              refId: A
+              expr: jq_rhiza_releases_behind
+              range: true
+              instant: false
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, reducer: last, expression: A }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: jq-pr-red
+        title: Open pull request with red checks
+        condition: C
+        for: 24h
+        labels:
+          severity: warning
+          fleet: jebel-quant
+        annotations:
+          summary: "{{ $labels.repo }} has {{ $values.B }} open PR(s) with failing checks"
+          runbook: "https://github.com/{{ $labels.repo }}/pulls"
+        noDataState: OK
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: jq-prometheus
+            model:
+              refId: A
+              expr: jq_open_pull_requests_failing
+              range: true
+              instant: false
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, reducer: last, expression: A }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: jq-local-dirty
+        title: Working copy left dirty
+        condition: C
+        for: 72h
+        labels:
+          severity: warning
+          fleet: jebel-quant
+        annotations:
+          summary: "{{ $labels.repo }} has had uncommitted changes for three days"
+        noDataState: OK
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: jq-prometheus
+            model:
+              refId: A
+              expr: jq_local_dirty_files
+              range: true
+              instant: false
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, reducer: last, expression: A }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: jq-local-off-branch
+        title: Clone parked off its default branch
+        condition: C
+        for: 72h
+        labels:
+          severity: warning
+          fleet: jebel-quant
+        annotations:
+          summary: "{{ $labels.repo }} has sat on a non-default branch for three days - a session may have abandoned it"
+        noDataState: OK
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: jq-prometheus
+            model:
+              refId: A
+              expr: jq_local_on_default_branch
+              range: true
+              instant: false
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, reducer: last, expression: A }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: jq-collector-stale
+        title: Collector is not refreshing
+        condition: C
+        for: 15m
+        labels:
+          severity: critical
+          fleet: jebel-quant
+        annotations:
+          summary: "The {{ $labels.source }} refresh has not succeeded in over 30 minutes - every panel below is stale"
+        noDataState: Alerting
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: jq-prometheus
+            model:
+              refId: A
+              expr: time() - jq_collector_last_success_timestamp_seconds
+              range: true
+              instant: false
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, reducer: last, expression: A }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [1800] }
