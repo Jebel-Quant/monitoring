@@ -37,17 +37,15 @@ def is_local_only(panel):
     return bool(exprs) and all(LOCAL in e for e in exprs)
 
 
-GOOD, WARN, CRIT = "#0ca30c", "#fab219", "#d03b3b"
-
-
 def mission_control(dash: dict) -> None:
-    """Restyle the public copy as a status board rather than a working tool.
+    """Restyle the public copy as an instrument panel rather than a working tool.
 
-    The private board is something you interrogate; this one is something you
-    glance at. So: one dominant verdict, a row of plain counters, and a row of
-    lit status blocks. Colour does real work here - every coloured panel means
-    good or bad, and the counters that mean neither stay unlit, because a
-    backlog of 37 issues is workload, not a fault.
+    Restrained on purpose. An earlier version led with a full-bleed green
+    "ALL CLEAR" block, which reads as a billboard rather than a status board and
+    drowns the numbers that actually carry information. Colour stays on the
+    figure, not behind it: a dark panel with a lit number is legible at a glance
+    without shouting, and a wall of green tells you nothing a row of green
+    numerals does not.
     """
     by_title = {p.get("title"): p for p in dash["panels"]}
 
@@ -56,83 +54,42 @@ def mission_control(dash: dict) -> None:
         if not panel:
             return
         opts = panel.setdefault("options", {})
-        opts["colorMode"] = "background" if lit else "none"
-        opts["graphMode"] = "area"          # a sparkline turns a number into telemetry
-        # "value_and_name" prints the raw PromQL beside the number - the series
-        # has no name, so Grafana falls back to the expression. The panel title
-        # already says what it is.
+        # "value" colours the numeral against the dark surface; "background"
+        # floods the panel. "value_and_name" would print the raw PromQL beside
+        # it, since the series has no name and Grafana falls back to the query.
+        # Only verdicts wear colour. A count of repos or open issues is
+        # workload, not good news - colouring it green says something untrue.
+        opts["colorMode"] = "value" if lit else "none"
+        opts["graphMode"] = "area"      # a sparkline turns a number into telemetry
         opts["textMode"] = "value"
-        opts["justifyMode"] = "center"
+        opts["justifyMode"] = "auto"
         opts.setdefault("reduceOptions", {})["calcs"] = ["lastNotNull"]
-        opts["text"] = {"valueSize": 56 if lit else 44, "titleSize": 13}
+        opts["text"] = {"valueSize": 48, "titleSize": 13}
         if unit:
             panel["fieldConfig"]["defaults"]["unit"] = unit
 
-    hero = {
-        "id": 200,
-        "type": "stat",
-        "title": "FLEET STATUS",
-        "description": "Every red workflow, drifted repo and failing pull request, added up.",
-        "datasource": {"type": "prometheus", "uid": "jq-prometheus"},
-        "targets": [{
-            "refId": "A",
-            "expr": "sum(jq_ci_last_run_success == bool 0) "
-                    "+ sum(jq_rhiza_releases_behind > bool 0) "
-                    "+ sum(jq_open_pull_requests_failing)",
-            "instant": True,
-        }],
-        "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "textMode": "value",
-            "justifyMode": "center",
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
-            "text": {"valueSize": 110},
-        },
-        "fieldConfig": {
-            "defaults": {
-                "unit": "short",
-                "decimals": 0,
-                "mappings": [{"type": "value", "options": {
-                    "0": {"text": "ALL CLEAR", "index": 0}}}],
-                "thresholds": {"mode": "absolute", "steps": [
-                    {"color": GOOD, "value": None},
-                    {"color": WARN, "value": 1},
-                    {"color": CRIT, "value": 5},
-                ]},
-            },
-            "overrides": [],
-        },
-    }
-    dash["panels"].append(hero)
-    by_title["FLEET STATUS"] = hero
-
-    for t in ("Repos monitored", "Open PRs", "Open issues", "Data age"):
-        restyle(t, lit=False, unit="s" if t == "Data age" else None)
+    for t in ("Repos monitored", "Open PRs", "Open issues"):
+        restyle(t, lit=False)
     for t in ("CI red on main", "Behind template", "PRs with red checks"):
         restyle(t, lit=True)
-    # Data age is the one counter that IS a verdict - stale data invalidates
-    # everything above it - so it keeps its thresholds and gets lit.
-    if "Data age" in by_title:
-        by_title["Data age"]["options"]["colorMode"] = "background"
+    # Data age is a verdict: stale data invalidates everything above it.
+    restyle("Data age", lit=True, unit="s")
 
     LAYOUT = {
-        "FLEET STATUS": (0, 1, 9, 8),
-        "Repos monitored": (9, 1, 5, 4),
-        "Open PRs": (14, 1, 5, 4),
-        "Open issues": (19, 1, 5, 4),
-        "CI red on main": (9, 5, 5, 4),
-        "Behind template": (14, 5, 5, 4),
-        "PRs with red checks": (19, 5, 5, 4),
-        "Data age": (0, 9, 24, 3),  # a thin status strip closing the header
+        "Repos monitored": (0, 1, 4, 5),
+        "Open PRs": (4, 1, 4, 5),
+        "Open issues": (8, 1, 4, 5),
+        "CI red on main": (12, 1, 4, 5),
+        "Behind template": (16, 1, 4, 5),
+        "PRs with red checks": (20, 1, 4, 5),
+        "Data age": (0, 6, 24, 3),
     }
     placed = set(LAYOUT)
     for title, (x, y, w, h) in LAYOUT.items():
         if title in by_title:
             by_title[title]["gridPos"] = {"x": x, "y": y, "w": w, "h": h}
 
-    # Everything below the header block shifts to sit under it.
-    header_bottom = 12
+    header_bottom = 9
     rest = [p for p in dash["panels"]
             if p.get("title") not in placed and p["gridPos"]["y"] > 0]
     if rest:
