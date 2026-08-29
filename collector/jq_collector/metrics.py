@@ -165,6 +165,11 @@ def render(snap: Snapshot):
         "Always 1; one series per open pull request.",
         ["repo", "number", "title", "author", "checks", "draft"],
     )
+    merged_at = _gauge(
+        "jq_merged_pull_request_timestamp_seconds",
+        "Unix time a pull request was merged. topk() over this gives the newest.",
+        ["repo", "number", "title", "author"],
+    )
     pr_created = _gauge(
         "jq_pull_request_created_timestamp_seconds",
         "Unix time the pull request was opened.",
@@ -292,6 +297,17 @@ def render(snap: Snapshot):
                 )
                 pr_created.add_metric([*ident, number], pull.created_at)
 
+            # One series per recently merged PR. The value is the merge time, so
+            # the board can take topk() across the fleet rather than needing a
+            # per-repo view. Deduped on number because a repo occasionally
+            # reports the same PR twice across a page boundary.
+            seen: set[int] = set()
+            for m in remote.merged:
+                if m.number in seen:
+                    continue
+                seen.add(m.number)
+                merged_at.add_metric([*ident, str(m.number), m.title, m.author], m.merged_at)
+
         if local is not None:
             local_branch.add_metric([*ident, local.branch or "unknown"], 1)
             on_default.add_metric(ident, 1 if local.branch == default_branch else 0)
@@ -329,6 +345,7 @@ def render(snap: Snapshot):
         pr_failing,
         pr_info,
         pr_created,
+        merged_at,
         local_branch,
         on_default,
         dirty,

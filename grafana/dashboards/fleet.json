@@ -1475,6 +1475,151 @@
       "id": 16
     },
     {
+      "id": 20,
+      "type": "table",
+      "title": "Recently merged pull requests",
+      "description": "The ten most recent merges across the whole fleet. Closed-but-abandoned pull requests are excluded - only ones that actually landed appear here.",
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 61
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - topk(10, jq_merged_pull_request_timestamp_seconds{repo=~\"$repo\"})",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "fleet": true
+            },
+            "indexByName": {
+              "repo": 0,
+              "number": 1,
+              "title": 2,
+              "author": 3,
+              "Value": 4
+            },
+            "renameByName": {
+              "repo": "Repo",
+              "number": "#",
+              "title": "Title",
+              "author": "Author",
+              "Value": "Merged"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Merged",
+                "desc": false
+              }
+            ]
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Repo"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 240
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open on GitHub",
+                    "url": "https://github.com/${__value.text}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "#"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this pull request",
+                    "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Merged"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "type": "table",
       "title": "Local working copies",
       "description": "Ahead and behind are as of each clone's last fetch - read them next to the fetch age. 'In sync' compares the local default-branch commit with the one GitHub reports and needs no fetch. 'Checkout ref' is the template ref pinned in *this clone*, which can lag the repo's own ref shown under Template drift.",
@@ -1482,7 +1627,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 72
       },
       "datasource": {
         "type": "prometheus",
@@ -1780,7 +1925,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 77
+        "y": 88
       },
       "collapsed": true,
       "panels": [
@@ -2640,7 +2785,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 78
+        "y": 89
       },
       "collapsed": true,
       "panels": [
