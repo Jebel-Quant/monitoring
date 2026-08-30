@@ -18,7 +18,7 @@ services:
       # opinion about which repos are yours.
       JQ_REPO_ROOT: /repos
       JQ_TEMPLATE_REPO: ${JQ_TEMPLATE_REPO:-Jebel-Quant/rhiza}
-      JQ_GITHUB_INTERVAL: ${JQ_GITHUB_INTERVAL:-300}
+      JQ_GITHUB_INTERVAL: ${JQ_GITHUB_INTERVAL:-600}
       JQ_LOCAL_INTERVAL: ${JQ_LOCAL_INTERVAL:-60}
       JQ_IGNORE: ${JQ_IGNORE:-}
       JQ_PUBLIC_ONLY: ${JQ_PUBLIC_ONLY:-false}

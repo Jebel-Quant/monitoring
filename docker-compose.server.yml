@@ -31,7 +31,7 @@ services:
       # difference is that a server has no checkouts to derive it from.
       JQ_REPOS: ${JQ_REPOS:?set JQ_REPOS to a comma-separated list of owner/name}
       JQ_TEMPLATE_REPO: ${JQ_TEMPLATE_REPO:-Jebel-Quant/rhiza}
-      JQ_GITHUB_INTERVAL: ${JQ_GITHUB_INTERVAL:-300}
+      JQ_GITHUB_INTERVAL: ${JQ_GITHUB_INTERVAL:-600}
       # No clones on a server. Empty means "skip local scanning".
       JQ_REPO_ROOT: ""
       # Not overridable: this stack exists to be public.
