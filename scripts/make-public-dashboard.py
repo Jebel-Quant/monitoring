@@ -13,6 +13,14 @@ Two things have to change for a board that will be served world-readable:
    That is not secret when the repos are public, but it is someone's working
    state and it is meaningless to anyone else, so it is dropped.
 
+3. Everything sourced from `jq_rhiza_*` is template drift, which is a rhiza
+   concern. Most people who open the public link do not use the template at
+   all, so "three releases behind" reads as a defect rather than as something
+   that does not apply to them. The whole Template drift section goes, along
+   with the drill-down table and the trend-chart series that read the same
+   metrics - a headline tile removed while a chart still plots the number is
+   not a removal. The private board keeps all of it.
+
 Run after changing fleet.json; the output is provisioned like any other file.
 """
 
@@ -24,17 +32,51 @@ HERE = pathlib.Path(__file__).resolve().parent.parent
 SRC = HERE / "grafana/dashboards/fleet.json"
 DST = HERE / "grafana/dashboards/fleet-public.json"
 
-LOCAL = "jq_local"
+# Metric families the public copy does not carry, each for its own reason
+# (see 2 and 3 above). A panel is dropped when every one of its queries reads
+# one of these; a panel that also reads something else keeps its other series.
+DROPPED_METRICS = ("jq_local", "jq_rhiza")
 
 
 def targets_of(panel):
     return panel.get("targets", []) or []
 
 
-def is_local_only(panel):
-    """True when every query in the panel comes from local-clone metrics."""
+def is_dropped_metric(expr: str) -> bool:
+    return any(metric in expr for metric in DROPPED_METRICS)
+
+
+def is_dropped_only(panel):
+    """True when every query in the panel reads a family we do not publish."""
     exprs = [t.get("expr", "") for t in targets_of(panel)]
-    return bool(exprs) and all(LOCAL in e for e in exprs)
+    return bool(exprs) and all(is_dropped_metric(e) for e in exprs)
+
+
+def drop_empty_rows(panels):
+    """A row whose every panel was dropped would render as a bare heading.
+
+    Template drift loses all three of its panels, so the row goes with them
+    rather than leaving a title with nothing under it.
+    """
+    ordered = sorted(panels, key=lambda p: (p["gridPos"]["y"], p["gridPos"]["x"]))
+    kept, i = [], 0
+    while i < len(ordered):
+        panel = ordered[i]
+        if panel.get("type") != "row":
+            kept.append(panel)
+            i += 1
+            continue
+        j = i + 1
+        following = []
+        while j < len(ordered) and ordered[j].get("type") != "row":
+            following.append(ordered[j])
+            j += 1
+        # Children live inside a collapsed row and beside an expanded one.
+        if panel.get("panels") or following:
+            kept.append(panel)
+            kept.extend(following)
+        i = j
+    return kept
 
 
 def mission_control(dash: dict) -> None:
@@ -70,7 +112,7 @@ def mission_control(dash: dict) -> None:
 
     for t in ("Repos monitored", "Open PRs", "Open issues"):
         restyle(t, lit=False)
-    for t in ("CI red on main", "Behind template", "PRs with red checks"):
+    for t in ("CI red on main", "PRs with red checks"):
         restyle(t, lit=True)
     # Data age is a verdict: stale data invalidates everything above it.
     restyle("Data age", lit=True, unit="s")
@@ -120,7 +162,7 @@ def main() -> None:
             yield panel
             yield from walk(panel.get("panels", []))
 
-    dropped_ids = {p["id"] for p in walk(dash["panels"]) if is_local_only(p)}
+    dropped_ids = {p["id"] for p in walk(dash["panels"]) if is_dropped_only(p)}
 
     def prune(panels):
         kept = []
@@ -130,13 +172,13 @@ def main() -> None:
             if panel.get("panels"):
                 panel["panels"] = prune(panel["panels"])
             # A mixed panel keeps its non-local series only.
-            if targets_of(panel) and not is_local_only(panel):
-                keep = [t for t in targets_of(panel) if LOCAL not in t.get("expr", "")]
+            if targets_of(panel) and not is_dropped_only(panel):
+                keep = [t for t in targets_of(panel) if not is_dropped_metric(t.get("expr", ""))]
                 if len(keep) != len(targets_of(panel)):
                     gone = {
                         t.get("legendFormat")
                         for t in targets_of(panel)
-                        if LOCAL in t.get("expr", "")
+                        if is_dropped_metric(t.get("expr", ""))
                     }
                     panel["targets"] = keep
                     panel["fieldConfig"]["overrides"] = [
@@ -155,7 +197,7 @@ def main() -> None:
             kept.append(panel)
         return kept
 
-    dash["panels"] = prune(dash["panels"])
+    dash["panels"] = drop_empty_rows(prune(dash["panels"]))
 
     # Strip every data link: none of them can work for an anonymous viewer.
     for panel in walk(dash["panels"]):
@@ -231,13 +273,14 @@ def main() -> None:
     leftover = re.findall(r"\$repo", raw)
     if leftover:
         raise SystemExit(f"{len(leftover)} unresolved $repo references remain")
-    if LOCAL in raw:
-        raise SystemExit("local-clone metrics survived the strip")
+    for metric in DROPPED_METRICS:
+        if metric in raw:
+            raise SystemExit(f"{metric} metrics survived the strip")
     if "/d/jq-fleet" in raw:
         raise SystemExit("an absolute dashboard link survived - it would 401 a public viewer")
 
     DST.write_text(json.dumps(json.loads(raw), indent=2) + "\n")
-    print(f"wrote {DST.relative_to(HERE)} ({len(dropped_ids)} local panels dropped)")
+    print(f"wrote {DST.relative_to(HERE)} ({len(dropped_ids)} panels dropped)")
 
 
 if __name__ == "__main__":
