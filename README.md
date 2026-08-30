@@ -55,7 +55,6 @@ after the first API refresh. Both `repos.yml` and the generated
 | Stop | `./scripts/down.sh` (add `--volumes` to discard the history too) |
 | Edit the board | change `grafana/dashboards/fleet.json`; it reloads in 30s — [read the traps first](docs/dashboard.md#traps-worth-not-re-introducing) |
 | Get notified | add a contact point under *Alerting → Contact points* — [why it is not provisioned](docs/dashboard.md#alerting) |
-| Put it on the internet | [docs/serving.md](docs/serving.md) — do not skip the preflight |
 
 | | |
 |---|---|
@@ -76,7 +75,6 @@ Also published as a book: **<https://jebel-quant.github.io/monitoring/>**
 | [Configuration](docs/configuration.md) | `repos.yml`, `.env`, the API budget |
 | [What it watches](docs/metrics.md) | the four subjects, the metrics, and why each is shaped that way |
 | [The dashboard](docs/dashboard.md) | reading it, editing it, alerting, and the query traps |
-| [Serving it publicly](docs/serving.md) | public dashboards, the server stack, a VPS, TLS |
 | [Day to day](docs/operations.md) | why panels say *No data*, and what the sign-in button is |
 
 **If every panel says "No data", the machine was probably asleep.** Docker

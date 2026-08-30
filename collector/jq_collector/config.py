@@ -32,9 +32,10 @@ class Config:
 
     On a laptop the list is generated from ``repos.yml`` by
     ``scripts/gen-repos.py``, which also mounts each checkout at
-    ``$JQ_REPO_ROOT/<owner>/<name>``; on a server it is set by hand and no
-    checkouts exist. Both halves read the same list, so the GitHub panels and
-    the working-copy panels can never disagree about who is in the fleet.
+    ``$JQ_REPO_ROOT/<owner>/<name>``. Setting it by hand works too, and then
+    nothing mounts the checkouts. Both halves read the same list, so the GitHub
+    panels and the working-copy panels can never disagree about who is in the
+    fleet.
     """
 
     repos: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_REPOS"))
@@ -44,8 +45,8 @@ class Config:
 
     # Where the checkouts are mounted (read-only) inside the container, one per
     # repo at <repo_root>/<owner>/<name>. Set empty to skip local scanning
-    # entirely - the right setting on a server, where there are no working
-    # copies and the local panels do not apply.
+    # entirely, which is the right setting anywhere there are no working copies
+    # to report on - the local panels then simply have nothing to say.
     repo_root: str = os.environ.get("JQ_REPO_ROOT", "/repos")
 
     # owner/name of the repo whose releases define "up to date".
@@ -88,8 +89,9 @@ class Config:
     include_archived: bool = os.environ.get("JQ_INCLUDE_ARCHIVED", "false").lower() == "true"
 
     # Drop private repos entirely - not just their details, but their existence.
-    # For a board served world-readable, a private repo's name, its workflow
-    # names, its PR titles and its local branch names are all disclosure.
+    # The board binds to loopback, so this is not what keeps a private repo off
+    # the network; it is for when you would rather it were never fetched, since
+    # its name, workflow names, PR titles and branch names are all disclosure.
     public_only: bool = os.environ.get("JQ_PUBLIC_ONLY", "false").lower() == "true"
 
     def is_ignored(self, owner: str, name: str) -> bool:

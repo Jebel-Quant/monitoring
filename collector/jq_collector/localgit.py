@@ -355,8 +355,9 @@ def scan(
     prior = previous or {}
     found: dict[str, LocalRepo] = {}
     if not cfg.repo_root:
-        # Deliberate: on a server there are no working copies to report on, and
-        # an empty result is the honest answer rather than an error every minute.
+        # Deliberate: with no repo root there are no working copies to report
+        # on, and an empty result is the honest answer rather than an error
+        # every minute.
         return found
     if not os.path.isdir(cfg.repo_root):
         log.error("repo root %s is not a directory", cfg.repo_root)
@@ -369,8 +370,8 @@ def scan(
         path = os.path.join(cfg.repo_root, owner, repo_name)
         # `.git` is a directory in a plain checkout and a file in a worktree.
         if not os.path.exists(os.path.join(path, ".git")):
-            # Not mounted, or mounted somewhere else. Normal on a server, and
-            # normal for a repo you monitor but have not checked out.
+            # Not mounted, or mounted somewhere else. Normal for a repo you
+            # monitor but have not checked out.
             log.debug("no working copy for %s at %s", key, path)
             continue
 
