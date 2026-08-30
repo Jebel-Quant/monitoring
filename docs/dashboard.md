@@ -39,6 +39,55 @@ colour actually means good or bad. Status cells always carry a glyph and a word
 as well, so nothing depends on colour alone.
 
 
+## Size and cadence
+
+One row per checkout: lines of code, lines of test, how long since the last
+commit, commits in the last 30 days, and commits since the newest release.
+
+**LOC and Tests are lines of tracked source in the working copy.** Tracked, so a
+stray virtualenv cannot dwarf the repo it sits in. Source, so the markdown, the
+lockfiles and the CSV fixtures are out — which means a repo whose product *is*
+configuration, like a workflow template, will read smaller here than it feels.
+Working copy, so uncommitted work counts. A file is test code if it sits under
+`tests/`, `test/` or `testing/`, or if it is named `test_*` / `*_test.*` — both
+conventions are in this fleet.
+
+**The two commit counts are taken on the default branch**, not on whatever
+branch the clone is parked on: a repo's cadence is what landed on main, not what
+you happen to have checked out. *Unreleased* counts commits since the newest tag
+**reachable in this clone**, so a release published since your last fetch is not
+reflected yet. Read it next to *Last fetch* on the panel above, the same way you
+read ahead/behind. A repo that has never been tagged shows `never tagged` rather
+than `0`, because zero unreleased commits means "everything is shipped" and that
+is the opposite of the truth.
+
+**None of the five columns is status-coloured.** They are magnitude and
+workload, not verdicts — the same reason *Open PRs* is not coloured.
+
+### Why the numbers sit still
+
+Counting lines means reading every tracked file, and the clones are bind
+mounts — cheap natively, much less so through Docker Desktop. So the whole row
+is measured only when the clone has actually moved: a new commit, an edit, a new
+untracked file, a new tag. Between those, the previous scan's numbers are
+carried over verbatim. **A flat line here is a quiet repo, not a stuck
+collector.**
+
+Two consequences worth knowing:
+
+- **Tagging the current commit moves neither HEAD nor the tree**, so the tag
+  mtimes under `.git` are part of what counts as movement. Without that, cutting
+  a release would leave *Unreleased* showing its pre-release value on exactly
+  the day you would look at it.
+- **The 30-day window slides on its own.** A repo that has gone quiet still has
+  to watch its old commits fall out of the count, so a carried-over reading
+  expires after `JQ_MEASURE_MAX_AGE` (a day by default) regardless of movement.
+
+Template drift is deliberately *outside* this cache. It is the one thing that
+changes while the clone stands still — because it is the upstream that moved —
+so the pointer is re-read on every pass.
+
+
 ## Traps worth not re-introducing
 
 JSON cannot carry comments, so these are recorded here instead. The first two

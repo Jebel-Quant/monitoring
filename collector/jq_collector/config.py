@@ -58,6 +58,16 @@ class Config:
     github_interval: int = _int("JQ_GITHUB_INTERVAL", 300)
     local_interval: int = _int("JQ_LOCAL_INTERVAL", 60)
 
+    # Line counts and commit counts are re-measured only when the clone has
+    # actually moved (see localgit._fingerprint), because counting lines means
+    # reading every tracked file and the clones are bind mounts - cheap on a
+    # native filesystem, not cheap through Docker Desktop. This is the ceiling
+    # on how long a cached measurement may stand anyway: the 30-day commit
+    # window slides whether or not anyone commits, so a repo that has gone
+    # quiet still needs its count to decay. A day is well inside the resolution
+    # of a 30-day figure.
+    measure_max_age: int = _int("JQ_MEASURE_MAX_AGE", 86400)
+
     http_timeout: int = _int("JQ_HTTP_TIMEOUT", 20)
 
     # Open PRs are enumerated per repo; each one costs a further call for its

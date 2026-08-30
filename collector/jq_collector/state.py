@@ -113,8 +113,29 @@ class LocalRepo:
     stashes: int = 0
     last_commit_at: float = 0.0
     fetch_age: float | None = None
+    head_sha: str = ""
     default_branch_sha: str = ""
     rhiza_ref: str = ""
+
+    # -- measurements ----------------------------------------------------
+    # Everything below is carried over from the previous scan unless the clone
+    # moved; `fingerprint` is what "moved" means and `measured_at` caps how
+    # long a carried-over value may stand. See localgit._fingerprint.
+    #
+    # Line counts describe the working copy, commit counts describe the
+    # default branch. That is deliberate rather than sloppy: lines are what is
+    # on disk right now, including work you have not committed, while a clone
+    # parked on a feature branch should still report what the *repo* has been
+    # doing rather than what that branch has.
+    code_lines: int = 0
+    test_lines: int = 0
+    commits_30d: int = 0
+    # None when the clone has no tags at all. Zero would read as "everything is
+    # released", which is the opposite of "nothing has ever been released".
+    commits_since_release: int | None = None
+    last_release: str = ""
+    fingerprint: str = ""
+    measured_at: float = 0.0
 
 
 @dataclass(frozen=True)
