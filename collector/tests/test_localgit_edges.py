@@ -221,6 +221,12 @@ def test_ahead_and_behind_are_read_from_the_upstream(tmp_path):
     upstream = make_checkout(tmp_path / "up", "o", "r")
     clone = tmp_path / "clone"
     subprocess.run(["git", "clone", "-q", str(upstream), str(clone)], check=True)
+    # An identity has to be set on the clone as well: make_checkout sets it
+    # per-repo, and repo-local config is not cloned. A CI runner has no global
+    # identity, so without this the commit below fails there and passes on any
+    # laptop that happens to have one.
+    for key, value in (("user.email", "t@example.com"), ("user.name", "T")):
+        subprocess.run(["git", "-C", str(clone), "config", key, value], check=True)
     (clone / "new.py").write_text("a\n")
     subprocess.run(["git", "-C", str(clone), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(clone), "commit", "-qm", "ahead by one"], check=True)
