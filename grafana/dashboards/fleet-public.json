@@ -461,12 +461,216 @@
     },
     {
       "type": "row",
-      "title": "Detail",
+      "title": "Collector health",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 18
+      },
+      "collapsed": false,
+      "id": 526,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "GitHub rate limit remaining",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 19
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jq_github_rate_limit_remaining",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#d03b3b",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 500
+              },
+              {
+                "color": "#0ca30c",
+                "value": 1500
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 527
+    },
+    {
+      "type": "stat",
+      "title": "Since last GitHub refresh",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 19
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - jq_collector_last_success_timestamp_seconds{source=\"github\"}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 900
+              },
+              {
+                "color": "#d03b3b",
+                "value": 3600
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 528
+    },
+    {
+      "type": "timeseries",
+      "title": "Refresh duration",
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jq_collector_refresh_duration_seconds",
+          "legendFormat": "{{source}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "github"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "local"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "id": 529
+    },
+    {
+      "type": "row",
+      "title": "Detail",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
       },
       "collapsed": false,
       "id": 14,
@@ -479,7 +683,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 25
       },
       "datasource": {
         "type": "prometheus",
@@ -723,7 +927,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 39
       },
       "datasource": {
         "type": "prometheus",
@@ -978,7 +1182,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 45
+        "y": 51
       },
       "datasource": {
         "type": "prometheus",
@@ -1122,7 +1326,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 62
       },
       "collapsed": false,
       "panels": []
@@ -1136,7 +1340,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 57
+        "y": 63
       },
       "datasource": {
         "type": "prometheus",
@@ -1255,7 +1459,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 75
       },
       "datasource": {
         "type": "prometheus",
@@ -1371,7 +1575,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 81
+        "y": 87
       },
       "datasource": {
         "type": "prometheus",
@@ -1537,7 +1741,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 93
+        "y": 99
       },
       "datasource": {
         "type": "prometheus",
@@ -1640,210 +1844,6 @@
           }
         ]
       }
-    },
-    {
-      "type": "row",
-      "title": "Collector health",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 105
-      },
-      "collapsed": false,
-      "id": 526,
-      "panels": []
-    },
-    {
-      "type": "stat",
-      "title": "GitHub rate limit remaining",
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 0,
-        "y": 106
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "jq_github_rate_limit_remaining",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#d03b3b",
-                "value": null
-              },
-              {
-                "color": "#fab219",
-                "value": 500
-              },
-              {
-                "color": "#0ca30c",
-                "value": 1500
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "id": 527
-    },
-    {
-      "type": "stat",
-      "title": "Since last GitHub refresh",
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 6,
-        "y": 106
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "time() - jq_collector_last_success_timestamp_seconds{source=\"github\"}",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ca30c",
-                "value": null
-              },
-              {
-                "color": "#fab219",
-                "value": 900
-              },
-              {
-                "color": "#d03b3b",
-                "value": 3600
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "id": 528
-    },
-    {
-      "type": "timeseries",
-      "title": "Refresh duration",
-      "gridPos": {
-        "h": 5,
-        "w": 12,
-        "x": 12,
-        "y": 106
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "jq_collector_refresh_duration_seconds",
-          "legendFormat": "{{source}}"
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "github"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3987e5"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "local"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#d95926"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "id": 529
     },
     {
       "type": "row",
