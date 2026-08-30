@@ -15,14 +15,27 @@ class FakeGitHub(GitHub):
     them, which keeps the fixtures readable.
     """
 
-    def __init__(self, cfg: Config, responses: dict[str, object]) -> None:
+    def __init__(
+        self,
+        cfg: Config,
+        responses: dict[str, object],
+        blobs: dict[str, bytes] | None = None,
+    ) -> None:
         super().__init__(cfg)
         self.responses = responses
+        # Raw-bytes routes, for the endpoints that return an archive rather
+        # than JSON. Kept apart so a test that does not care never has to
+        # mention them.
+        self.blobs = blobs or {}
         self.calls: list[str] = []
 
     def _json(self, path: str, **params: object) -> object | None:
         self.calls.append(path)
         return self.responses.get(path)
+
+    def _bytes(self, path: str) -> bytes | None:
+        self.calls.append(path)
+        return self.blobs.get(path)
 
 
 @pytest.fixture
@@ -32,8 +45,8 @@ def cfg() -> Config:
 
 @pytest.fixture
 def make_client(cfg):
-    def _make(responses: dict[str, object]) -> FakeGitHub:
-        return FakeGitHub(cfg, responses)
+    def _make(responses: dict[str, object], blobs: dict[str, bytes] | None = None) -> FakeGitHub:
+        return FakeGitHub(cfg, responses, blobs)
 
     return _make
 
