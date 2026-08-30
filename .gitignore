@@ -1,6 +1,13 @@
 .env
 
+# Your fleet and the mounts generated from it: both describe the folder layout
+# of one machine, which has no business in a public repo. Start from
+# repos.example.yml.
+repos.yml
+docker-compose.repos.yml
+
 # Left behind by running the collector natively instead of in its container.
 .venv/
 .ruff_cache/
+.pytest_cache/
 __pycache__/

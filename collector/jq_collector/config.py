@@ -24,23 +24,29 @@ def _csv(name: str, default: tuple[str, ...] = ()) -> tuple[str, ...]:
 class Config:
     """Everything the collector needs to know about its environment.
 
-    Repos arrive two ways: whole-org sweeps (``JQ_ORGS``) and individually named
-    repos (``JQ_REPOS``). The second exists because you rarely want *all* of a
-    large shared org - cvxgrp has 100+ repos and only a handful are yours.
+    The fleet is an explicit list: ``JQ_REPOS`` names every monitored repo as
+    ``owner/name``, and nothing else is ever gathered. There used to be a
+    whole-org sweep as well, which meant the board's contents were decided by
+    GitHub rather than by you - a new repo in the org appeared unasked, and a
+    shared org like cvxgrp dragged in a hundred repos that were not yours.
+
+    On a laptop the list is generated from ``repos.yml`` by
+    ``scripts/gen-repos.py``, which also mounts each checkout at
+    ``$JQ_REPO_ROOT/<owner>/<name>``; on a server it is set by hand and no
+    checkouts exist. Both halves read the same list, so the GitHub panels and
+    the working-copy panels can never disagree about who is in the fleet.
     """
 
-    orgs: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_ORGS", ("Jebel-Quant",)))
-    extra_repos: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_REPOS"))
+    repos: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_REPOS"))
 
     token: str = os.environ.get("GITHUB_TOKEN", "")
     api: str = os.environ.get("GITHUB_API", "https://api.github.com")
 
-    # Where the clones are mounted (read-only) inside the container. Scanned to
-    # a depth of two, so both ~/repos/<repo> and ~/repos/<org>/<repo> are found.
-    # Set empty to skip local scanning entirely - the right setting on a server,
-    # where there are no working copies and the local panels do not apply.
+    # Where the checkouts are mounted (read-only) inside the container, one per
+    # repo at <repo_root>/<owner>/<name>. Set empty to skip local scanning
+    # entirely - the right setting on a server, where there are no working
+    # copies and the local panels do not apply.
     repo_root: str = os.environ.get("JQ_REPO_ROOT", "/repos")
-    scan_depth: int = _int("JQ_SCAN_DEPTH", 2)
 
     # owner/name of the repo whose releases define "up to date".
     template_repo: str = os.environ.get("JQ_TEMPLATE_REPO", "Jebel-Quant/rhiza")
@@ -63,7 +69,10 @@ class Config:
     # could crowd out entries the fleet-wide list should have shown.
     recent_merges_per_repo: int = _int("JQ_RECENT_MERGES_PER_REPO", 10)
 
-    # Repos to leave out, as bare names or as owner/name.
+    # Repos to leave out, as bare names or as owner/name. Redundant now that
+    # the fleet is an explicit list - deleting the line from repos.yml is the
+    # obvious move - but it stays for the server, where the list is an env var
+    # and commenting one entry out is not possible.
     ignore: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_IGNORE"))
 
     include_archived: bool = os.environ.get("JQ_INCLUDE_ARCHIVED", "false").lower() == "true"
@@ -73,19 +82,5 @@ class Config:
     # names, its PR titles and its local branch names are all disclosure.
     public_only: bool = os.environ.get("JQ_PUBLIC_ONLY", "false").lower() == "true"
 
-    @property
-    def owners(self) -> frozenset[str]:
-        """Every owner we might accept a clone from, lowercased."""
-        from_extras = (r.split("/", 1)[0] for r in self.extra_repos if "/" in r)
-        return frozenset(o.lower() for o in (*self.orgs, *from_extras))
-
     def is_ignored(self, owner: str, name: str) -> bool:
         return name in self.ignore or f"{owner}/{name}" in self.ignore
-
-    def wants(self, owner: str, name: str) -> bool:
-        """Is this repo in scope - by its org, or by being named explicitly?"""
-        if self.is_ignored(owner, name):
-            return False
-        if owner.lower() in {o.lower() for o in self.orgs}:
-            return True
-        return f"{owner}/{name}".lower() in {r.lower() for r in self.extra_repos}

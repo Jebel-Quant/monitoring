@@ -8,6 +8,11 @@ Nothing here fetches. ``ahead``/``behind`` are therefore only as fresh as the
 last fetch *you* ran, which is why ``fetch_age`` is reported alongside them; for
 a fetch-independent answer the exporter compares the local default-branch sha
 with the one GitHub reports.
+
+Nothing here searches for checkouts either. Each monitored repo is expected at
+``<repo_root>/<owner>/<name>``, which is exactly where the generated compose
+override mounts it. The fleet is decided by ``repos.yml``, not by whatever
+happened to be lying around under a scanned directory.
 """
 
 from __future__ import annotations
@@ -23,9 +28,6 @@ from .state import LocalRepo
 log = logging.getLogger(__name__)
 
 _TIMEOUT = 20
-
-# Never descend into these while looking for clones.
-_SKIP_DIRS = frozenset({".git", ".venv", "venv", "node_modules", "__pycache__", ".tox", "target"})
 
 
 def _git(path: str, *args: str) -> str | None:
@@ -108,31 +110,6 @@ def _ahead_behind(path: str) -> tuple[int | None, int | None]:
         return None, None
 
 
-def _find_clones(root: str, max_depth: int) -> list[str]:
-    """Directories under ``root`` that are git working copies, breadth first."""
-    found: list[str] = []
-    frontier = [(root, 0)]
-    while frontier:
-        path, depth = frontier.pop(0)
-        if depth > max_depth:
-            continue
-        try:
-            entries = sorted(os.listdir(path))
-        except OSError:
-            continue
-        if ".git" in entries:
-            # A clone is a leaf: submodules and nested repos are not the fleet.
-            found.append(path)
-            continue
-        for entry in entries:
-            if entry in _SKIP_DIRS or entry.startswith("."):
-                continue
-            child = os.path.join(path, entry)
-            if os.path.isdir(child) and not os.path.islink(child):
-                frontier.append((child, depth + 1))
-    return found
-
-
 def scan_repo(name: str, owner: str, path: str, cfg: Config) -> LocalRepo:
     status = _git(path, "status", "--porcelain=v1") or ""
     lines = [line for line in status.splitlines() if line.strip()]
@@ -170,10 +147,13 @@ def scan(
     default_branches: dict[str, str],
     skip: frozenset[str] = frozenset(),
 ) -> dict[str, LocalRepo]:
-    """Scan every in-scope clone under the repo root, keyed by ``owner/name``.
+    """Read every listed repo's working copy, keyed by ``owner/name``.
+
+    A repo with no checkout on this machine is not an error: the fleet is the
+    list, and the local panels simply have nothing to say about that row.
 
     ``skip`` holds repos deliberately dropped - archived on GitHub, or named
-    in JQ_IGNORE. Without it a clone would keep a dropped repo on the board
+    in JQ_IGNORE. Without it a checkout would keep a dropped repo on the board
     after the GitHub half had stopped reporting it.
     """
     found: dict[str, LocalRepo] = {}
@@ -185,21 +165,35 @@ def scan(
         log.error("repo root %s is not a directory", cfg.repo_root)
         return found
 
-    for path in _find_clones(cfg.repo_root, cfg.scan_depth):
-        origin = origin_owner_name(path)
-        if origin is None:
-            log.debug("skipping %s: no origin remote", path)
+    for key in cfg.repos:
+        if "/" not in key or key in skip:
             continue
-        owner, repo_name = origin
-        if not cfg.wants(owner, repo_name):
-            # e.g. an upstream numpy clone, or another org's repo parked nearby.
-            log.debug("skipping %s: %s/%s is out of scope", path, owner, repo_name)
+        owner, repo_name = key.split("/", 1)
+        path = os.path.join(cfg.repo_root, owner, repo_name)
+        # `.git` is a directory in a plain checkout and a file in a worktree.
+        if not os.path.exists(os.path.join(path, ".git")):
+            # Not mounted, or mounted somewhere else. Normal on a server, and
+            # normal for a repo you monitor but have not checked out.
+            log.debug("no working copy for %s at %s", key, path)
             continue
 
-        key = f"{owner}/{repo_name}"
-        if key in skip:
-            log.debug("skipping %s: archived or ignored", key)
+        # The mount point claims to be this repo; the origin remote is the only
+        # thing that can confirm it. A wrong path in repos.yml would otherwise
+        # report one repo's dirty files under another repo's name.
+        origin = origin_owner_name(path)
+        if origin is not None and (origin[0].lower(), origin[1].lower()) != (
+            owner.lower(),
+            repo_name.lower(),
+        ):
+            log.warning(
+                "%s is a checkout of %s/%s, not %s - check repos.yml",
+                path,
+                origin[0],
+                origin[1],
+                key,
+            )
             continue
+
         local = scan_repo(repo_name, owner, path, cfg)
         default_branch = default_branches.get(key, "main")
         sha = _git(path, "rev-parse", "--verify", "--quiet", default_branch) or ""

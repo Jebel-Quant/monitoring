@@ -10,6 +10,13 @@ if [[ ! -f .env ]]; then
   echo "created monitoring/.env from the example"
 fi
 
+if [[ ! -f repos.yml ]]; then
+  cp repos.example.yml repos.yml
+  echo "created monitoring/repos.yml from the example - EDIT IT, then run this again"
+  echo "it lists the checkouts to monitor; the example points at paths you may not have"
+  exit 1
+fi
+
 # Only fill the token if it is still blank - never clobber one you set by hand.
 if ! grep -qE '^GITHUB_TOKEN=.+' .env; then
   if ! command -v gh >/dev/null 2>&1; then
@@ -24,7 +31,15 @@ if ! grep -qE '^GITHUB_TOKEN=.+' .env; then
   echo "wrote a token from 'gh auth token' into monitoring/.env"
 fi
 
-docker compose up -d --build
+# repos.yml is the fleet. Regenerate the mounts every time, so editing the list
+# and running ./scripts/up.sh is the whole workflow.
+if command -v uv >/dev/null 2>&1; then
+  uv run --quiet --with pyyaml scripts/gen-repos.py
+else
+  python3 scripts/gen-repos.py
+fi
+
+docker compose -f docker-compose.yml -f docker-compose.repos.yml up -d --build
 
 echo
 echo "Grafana     http://localhost:3000/d/jq-fleet   (anonymous read-only; admin/admin to edit)"

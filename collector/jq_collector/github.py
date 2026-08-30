@@ -107,31 +107,25 @@ class GitHub:
     # -- fleet-level -----------------------------------------------------
 
     def list_repos(self) -> list[dict]:
-        """Every in-scope repo: whole-org sweeps plus individually named ones."""
+        """The repos named in the config, in the order they were listed.
+
+        One call each, and no org sweep: the fleet is whatever you wrote down.
+        A repo that cannot be read is dropped with a warning rather than
+        failing the refresh, so one bad line does not blank the whole board.
+        """
         repos: list[dict] = []
         seen: set[str] = set()
 
-        for org in self._cfg.orgs:
-            found = self._paginate(f"/orgs/{org}/repos", type="all", sort="full_name")
-            if not found:
-                # A user account rather than an org, or no org read access.
-                owned = self._paginate("/user/repos", affiliation="owner", sort="full_name")
-                found = [r for r in owned if (r.get("owner") or {}).get("login") == org]
-            for raw in found:
-                if raw.get("full_name") not in seen:
-                    seen.add(raw["full_name"])
-                    repos.append(raw)
-
-        for full_name in self._cfg.extra_repos:
-            if full_name in seen or "/" not in full_name:
+        for full_name in self._cfg.repos:
+            if "/" not in full_name or full_name in seen:
                 continue
             raw = self._json(f"/repos/{full_name}")
-            if isinstance(raw, dict):
+            if isinstance(raw, dict) and raw.get("full_name"):
                 seen.add(raw["full_name"])
                 repos.append(raw)
             else:
                 log.warning(
-                    "named repo %s is not readable - check the token's scopes",
+                    "listed repo %s is not readable - check the name and the token's scopes",
                     full_name,
                 )
 
