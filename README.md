@@ -386,6 +386,15 @@ chmod 600 .env
 A `.env` rather than `export`, so the settings survive a reboot - compose reads
 it automatically, and it is gitignored.
 
+Afterwards, every routine change - a new repo in `JQ_REPOS`, a `git pull` - is
+`./scripts/restart.sh`. It skips the one-time DNS and token checks, waits for
+the collector's first GitHub refresh, and re-runs the preflight, because the
+setting you change most often is the fleet:
+
+```bash
+git pull && ./scripts/restart.sh
+```
+
 **Do not retype that `JQ_REPOS` line.** A fleet transcribed by hand is a fleet
 that quietly diverges from the one in `repos.yml` - a repo added on the laptop
 never reaches the board, and nothing reports the difference. Generate it on a
