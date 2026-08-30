@@ -50,8 +50,8 @@ after the first API refresh.
     Anonymous read access is on, so the board opens without signing in and
     `admin` / `admin` is only for settings. Published on `0.0.0.0` the stack
     would serve private repo names, PR titles and local branch names to anyone
-    on the network with no password. Putting it on the internet is a separate,
-    deliberate procedure — see [Serving it publicly](serving.md).
+    on the network with no password. This stack is built to run on one
+    machine; putting it on the internet is not a supported path.
 
 ## Where to go next
 
@@ -70,11 +70,6 @@ after the first API refresh.
 
     Reading the tiles, editing the JSON, alerting, and four PromQL traps worth
     not re-introducing.
-
-- :material-web: **[Serving it publicly](serving.md)**
-
-    Public dashboards, the server stack, a VPS, TLS — and the preflight that
-    must pass before any of it is exposed.
 
 - :material-calendar-check: **[Day to day](operations.md)**
 

@@ -90,8 +90,10 @@ better a refusal than a board that is quietly one repo short.
 | `JQ_GITHUB_INTERVAL` | `300` | Seconds between GitHub refreshes. |
 | `PROM_RETENTION` | `180d` | How much history to keep. |
 
-On the server stack there are no checkouts and so no `repos.yml`: the fleet is
-named directly in `JQ_REPOS`, a comma-separated list of `owner/name`.
+`scripts/gen-repos.py` turns `repos.yml` into the `JQ_REPOS` list the
+collector actually reads, so both halves see the same fleet. Setting `JQ_REPOS`
+by hand works too, and skips `repos.yml` entirely — but then nothing mounts the
+checkouts, so only the GitHub panels have anything to say.
 
 ## API budget
 

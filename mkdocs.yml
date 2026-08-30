@@ -114,5 +114,4 @@ nav:
   - Configuration: configuration.md
   - What it watches: metrics.md
   - The dashboard: dashboard.md
-  - Serving it publicly: serving.md
   - Day to day: operations.md

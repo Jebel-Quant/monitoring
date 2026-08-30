@@ -64,26 +64,14 @@ jobs:
       - name: Panel ids, link targets and grid overlaps
         run: python3 scripts/check-dashboard.py
 
-      # The public copy is generated, so it must match what the generator makes
-      # from the current fleet.json - otherwise a dashboard edit silently leaves
-      # the public board stale.
-      - name: Public dashboard is regenerated from source
-        run: |
-          python3 scripts/make-public-dashboard.py
-          git diff --exit-code -- grafana/dashboards/fleet-public.json \
-            || { echo "::error::fleet-public.json is stale - run scripts/make-public-dashboard.py"; exit 1; }
-
   compose:
     name: compose files parse
     runs-on: ubuntu-latest
     # The overlays only patch services, so they are not valid on their own -
-    # they are checked the way they are actually used. GITHUB_TOKEN and, for
-    # the server stack, JQ_REPOS are required variables; any value satisfies
-    # interpolation.
+    # they are checked the way they are actually used. GITHUB_TOKEN is a
+    # required variable; any value satisfies interpolation.
     env:
       GITHUB_TOKEN: dummy-value-for-interpolation-only
-      GF_ADMIN_PASSWORD: dummy-value-for-interpolation-only
-      JQ_REPOS: Jebel-Quant/rhiza
     steps:
       - uses: actions/checkout@v4
 
@@ -109,12 +97,3 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.repos.yml config --quiet
       - name: Base + admin overlay
         run: docker compose -f docker-compose.yml -f docker-compose.repos.yml -f docker-compose.admin.yml config --quiet
-      - name: Base + public overlay
-        run: docker compose -f docker-compose.yml -f docker-compose.repos.yml -f docker-compose.public.yml config --quiet
-      - name: Server stack
-        run: docker compose -f docker-compose.server.yml config --quiet
-      - name: Server + TLS overlay
-        env:
-          FLEET_DOMAIN: fleet.example.com
-          ACME_EMAIL: ci@example.com
-        run: docker compose -f docker-compose.server.yml -f docker-compose.tls.yml config --quiet
