@@ -179,6 +179,18 @@ def render(snap: Snapshot):
         "Per workflow: when that run finished.",
         ["repo", "workflow"],
     )
+    coverage = _gauge(
+        "jq_ci_coverage_percent",
+        "Line coverage from the newest default-branch coverage-report artifact. "
+        "Absent when the repo publishes none.",
+        ["repo"],
+    )
+    coverage_lines = _gauge(
+        "jq_ci_coverage_lines",
+        "Lines CI measured for that coverage figure. The percentage is not "
+        "interpretable without it, and its denominator is not jq_local_code_lines.",
+        ["repo"],
+    )
     wf_failing = _gauge(
         "jq_ci_workflows_failing",
         "How many of the repo's workflows are red on the default branch.",
@@ -361,6 +373,13 @@ def render(snap: Snapshot):
                 ci_dur.add_metric(ident, remote.ci_duration)
                 wf_failing.add_metric(ident, bad)
 
+            # Absent, not zero, when there is no report. Zero would read as
+            # "nothing is covered", which is a finding; "nobody publishes a
+            # report here" is not one.
+            if remote.coverage is not None:
+                coverage.add_metric(ident, remote.coverage)
+                coverage_lines.add_metric(ident, remote.coverage_lines)
+
             pr_count.add_metric(ident, remote.open_pulls_total)
             issue_count.add_metric(ident, remote.open_issues)
             # Red means red. A cancelled check is no verdict - the same rule the
@@ -440,6 +459,8 @@ def render(snap: Snapshot):
         wf_ok,
         wf_at,
         wf_failing,
+        coverage,
+        coverage_lines,
         pr_count,
         issue_count,
         pr_failing,

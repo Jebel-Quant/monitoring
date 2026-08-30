@@ -52,6 +52,20 @@ Working copy, so uncommitted work counts. A file is test code if it sits under
 `tests/`, `test/` or `testing/`, or if it is named `test_*` / `*_test.*` — both
 conventions are in this fleet.
 
+**Coverage is different in kind from its neighbours.** Every other column is
+read off your working copy and refreshes within a minute. Coverage comes from
+the newest `coverage-report` artifact CI built **on the default branch**, so it
+lags a push by a CI run and says nothing about uncommitted work. Repos that
+publish no such artifact read `no report`, which is not `0%` — six of this
+fleet are in that position.
+
+Its denominator is whatever CI pointed `--cov` at, and **that is not the LOC
+column**: rhiza reads 100% of 176 measured lines while LOC counts 1477. Both
+are right; they answer different questions. `jq_ci_coverage_lines` carries the
+denominator so the percentage can be read honestly. Note also that the branch
+filter is load-bearing — artifacts come back newest-first across every ref, and
+in a repo that tags releases the newest is usually a tag build.
+
 **The two commit counts are taken on the default branch**, not on whatever
 branch the clone is parked on: a repo's cadence is what landed on main, not what
 you happen to have checked out. *Unreleased* counts commits since the newest tag

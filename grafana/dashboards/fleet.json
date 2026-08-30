@@ -2090,7 +2090,7 @@
     {
       "type": "table",
       "title": "Size and cadence",
-      "description": "One row per checkout. LOC and Tests are lines of tracked source in the working copy - uncommitted work included, config and prose excluded - split on whether the file lives in a test tree or is named like a test. The two commit counts are taken on the default branch, not on whatever branch the clone is parked on. 'Unreleased' counts commits since the newest tag *in this clone*, so a release published since the last fetch is not reflected yet - read it next to the fetch age under Local working copies. All five are re-measured only when the clone moves, so a flat line here means a quiet repo, not a stuck collector.",
+      "description": "One row per checkout. LOC and Tests are lines of tracked source in the working copy - uncommitted work included, config and prose excluded - split on whether the file lives in a test tree or is named like a test. Coverage is different in kind: it comes from the newest coverage-report artifact CI built on the default branch, so it lags a push by a CI run and says nothing about uncommitted work. Its denominator is whatever CI pointed --cov at, which is NOT the LOC column - rhiza reads 100% of 176 measured lines while LOC counts 1477. jq_ci_coverage_lines carries that denominator. 'no report' means the repo publishes no such artifact, which is not the same as 0%. The two commit counts are taken on the default branch, not on whatever branch the clone is parked on. 'Unreleased' counts commits since the newest tag *in this clone*, so a release published since the last fetch is not reflected yet. LOC, Tests and the commit counts are re-measured only when the clone moves, so a flat line there means a quiet repo, not a stuck collector.",
       "gridPos": {
         "h": 13,
         "w": 24,
@@ -2137,6 +2137,12 @@
           "expr": "jq_local_last_release_info{repo=~\"$repo\"}",
           "instant": true,
           "format": "table"
+        },
+        {
+          "refId": "G",
+          "expr": "jq_ci_coverage_percent{repo=~\"$repo\"}",
+          "instant": true,
+          "format": "table"
         }
       ],
       "transformations": [
@@ -2151,7 +2157,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(repo|ref|Value #A|Value #B|Value #C|Value #D|Value #E)$"
+              "pattern": "^(repo|ref|Value #A|Value #B|Value #C|Value #D|Value #E|Value #G)$"
             }
           }
         },
@@ -2163,10 +2169,11 @@
               "repo": 0,
               "Value #A": 1,
               "Value #B": 2,
-              "Value #C": 3,
-              "Value #D": 4,
-              "Value #E": 5,
-              "ref": 6
+              "Value #G": 3,
+              "Value #C": 4,
+              "Value #D": 5,
+              "Value #E": 6,
+              "ref": 7
             },
             "renameByName": {
               "repo": "Repo",
@@ -2175,7 +2182,8 @@
               "Value #C": "Last commit",
               "Value #D": "Commits (30d)",
               "Value #E": "Unreleased",
-              "ref": "Release"
+              "ref": "Release",
+              "Value #G": "Coverage"
             }
           }
         },
@@ -2270,6 +2278,30 @@
               {
                 "id": "noValue",
                 "value": "\u2013"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Coverage"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "noValue",
+                "value": "no report"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
               }
             ]
           }

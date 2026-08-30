@@ -98,12 +98,20 @@ checkouts, so only the GitHub panels have anything to say.
 
 ## API budget
 
-A refresh costs roughly `3 × repos + open PRs` REST calls. Measured on this
-fleet of 32: **119 calls** for a steady-state refresh, or ~1430/hour at the
-default cadence, against an authenticated budget of 5000. A cold start adds one
-pointer read per repo; after that the sha-cache skips them — measured 32 pointer
-reads on the first refresh and **1** on the second, that one being the single
-repo whose default branch had moved. `jq_github_rate_limit_remaining` is on the *Collector health* row so the
+A refresh costs roughly `6 × repos + workflows + open PRs` REST calls. Measured
+on this fleet of 25: **370 calls** for a steady-state refresh, or ~2220/hour at
+the default 600s cadence, against an authenticated budget of 5000.
+
+> An earlier version of this page said 119 calls and ~1430/hour. That was
+> understated; the numbers above were measured by counting requests through a
+> full refresh rather than derived from the formula.
+
+Two caches keep it there. A cold start adds one pointer read per repo; after
+that the sha-cache skips them — measured 32 pointer reads on the first refresh
+and **1** on the second, that one being the single repo whose default branch
+had moved. Coverage adds one artifact listing per repo (25 calls, ~150/hour),
+but the report itself — a zip, the largest response here — is downloaded only
+when the artifact id changes: **19 downloads cold, 0 on the next refresh.** `jq_github_rate_limit_remaining` is on the *Collector health* row so the
 headroom is visible rather than assumed. Lower `JQ_GITHUB_INTERVAL` only if that
 number stays comfortable.
 

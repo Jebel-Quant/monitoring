@@ -44,7 +44,17 @@ def _refresh_github(cfg: Config, store: Store) -> None:
     ref_cache = {
         name: (repo.head_sha, repo.rhiza_ref) for name, repo in snap.remote.items() if repo.head_sha
     }
-    remote, api, latest, excluded = gh.collect(cfg, ref_cache)
+    # (artifact id, percent) per repo: an unchanged artifact means the report
+    # behind it is byte-identical, so there is nothing to gain from pulling the
+    # zip down again.
+    coverage_cache = {
+        name: (repo.coverage_artifact, (repo.coverage, repo.coverage_lines))
+        if repo.coverage is not None
+        else (repo.coverage_artifact, None)
+        for name, repo in snap.remote.items()
+        if repo.coverage_artifact
+    }
+    remote, api, latest, excluded = gh.collect(cfg, ref_cache, coverage_cache)
     try:
         store.update(
             remote=remote,

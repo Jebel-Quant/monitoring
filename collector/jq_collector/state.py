@@ -88,6 +88,17 @@ class RemoteRepo:
     ci_duration: float = 0.0
     ci_url: str = ""
 
+    # Line coverage from the newest coverage-report artifact CI built on the
+    # default branch, and that artifact's id. None means the repo publishes no
+    # such artifact, or the newest one could not be read - not that it has no
+    # tests. The id is what lets a refresh skip re-downloading an unchanged
+    # report; see github.collect.
+    coverage: float | None = None
+    # Lines CI actually measured. The percentage is not interpretable without
+    # it - 100% of 176 lines and 100% of 3878 are different assurances.
+    coverage_lines: int = 0
+    coverage_artifact: int = 0
+
     workflows: tuple[WorkflowRun, ...] = ()
     open_issues: int = 0
     # Open PRs as GitHub counts them, before max_prs_per_repo clipping. `pulls`

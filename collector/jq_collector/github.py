@@ -1,10 +1,16 @@
 """Read the state of the repos as GitHub sees them.
 
-Per refresh this costs roughly ``5 * repos + workflows + open_pull_requests``
-REST calls (one branch, one protection, one alert listing, one workflow-run and
-one pull listing each, plus a check-run listing per open PR). There are no
-conditional requests, so the cost scales with the fleet and does not fall when
-nothing has changed - see JQ_GITHUB_INTERVAL before growing either.
+Per refresh this costs roughly ``6 * repos + workflows + open_pull_requests``
+REST calls (one branch, one protection, one alert listing, one workflow-run,
+one artifact listing and one pull listing each, plus a check-run listing per
+open PR). Measured on a fleet of 25: 370 calls in the steady state. There are
+no conditional requests, so the cost scales with the fleet and does not fall
+when nothing has changed - see JQ_GITHUB_INTERVAL before growing either.
+
+The coverage artifact is the one response that is not JSON. Listing artifacts
+happens every refresh so a newly published report is picked up, but the zip is
+downloaded only when the artifact id has changed - measured 19 downloads on a
+cold pass and 0 on the next.
 ``jq_github_rate_limit_remaining`` is exported so the headroom is visible
 rather than assumed.
 """
@@ -13,8 +19,11 @@ from __future__ import annotations
 
 import base64
 import concurrent.futures
+import io
 import logging
+import zipfile
 from datetime import datetime
+from xml.etree import ElementTree
 
 import httpx
 
@@ -35,6 +44,17 @@ INCONCLUSIVE_CONCLUSIONS = frozenset({"cancelled", "stale"})
 
 _ACCEPT = "application/vnd.github+json"
 _MAX_WORKERS = 8
+
+# The artifact CI uploads its coverage report as, and the file to read inside
+# it. Repos that publish nothing by this name simply have no coverage on the
+# board - which is the honest answer, and not the same as zero.
+_COVERAGE_ARTIFACT = "coverage-report"
+
+# Guards on an archive we did not build. Coverage reports for a fleet this size
+# are tens of kilobytes; anything near these is a bug or a bomb, and unpacking
+# it would be the collector's problem rather than CI's.
+_MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
+_MAX_UNPACKED_BYTES = 64 * 1024 * 1024
 
 
 def _ts(value: str | None) -> float:
@@ -96,6 +116,17 @@ class GitHub:
             return None
         response.raise_for_status()
         return response.json()
+
+    def _bytes(self, path: str) -> bytes | None:
+        """GET returning raw bytes. 410 is added to the expected empties: that
+        is what an expired artifact returns, and artifacts expire on a schedule
+        nobody here controls."""
+        response = self._get(path)
+        if response.status_code in (403, 404, 409, 410, 451):
+            log.info("%s -> %s", path, response.status_code)
+            return None
+        response.raise_for_status()
+        return response.content
 
     def _paginate(self, path: str, **params: object) -> list[dict]:
         items: list[dict] = []
@@ -315,6 +346,60 @@ class GitHub:
             for wid, run in newest.items()
         ]
 
+    def coverage_artifact(self, full_name: str, branch: str) -> int:
+        """Id of the newest ``coverage-report`` artifact built on ``branch``.
+
+        Filtering on the branch is not optional. Artifacts are returned newest
+        first across *every* ref, and a tag build is usually the most recent
+        one - rhiza's newest coverage artifact is from ``v1.7.1``, not ``main``.
+        Taking the latest would quietly report a release build's coverage as
+        the repo's, which is a different number measured at a different commit.
+
+        Zero when the repo publishes no such artifact, which most of a mixed
+        fleet does not.
+        """
+        raw = self._json(f"/repos/{full_name}/actions/artifacts", per_page=100)
+        if not isinstance(raw, dict):
+            return 0
+        best_id, best_at = 0, ""
+        for artifact in raw.get("artifacts") or []:
+            if artifact.get("name") != _COVERAGE_ARTIFACT or artifact.get("expired"):
+                continue
+            if ((artifact.get("workflow_run") or {}).get("head_branch")) != branch:
+                continue
+            created = artifact.get("created_at") or ""
+            if created >= best_at:
+                best_id, best_at = int(artifact.get("id") or 0), created
+        return best_id
+
+    def coverage_percent(self, full_name: str, artifact_id: int) -> tuple[float, int] | None:
+        """``(line coverage as a percentage, lines measured)`` from that artifact.
+
+        The line count is carried because the percentage alone is not
+        interpretable. CI measures whatever it pointed ``--cov`` at, which is
+        the package rather than everything tracked: rhiza reports 100% of 176
+        lines, while the board's own LOC column counts 1477. Both are right and
+        they are answering different questions, so the denominator is exported
+        alongside rather than left to be guessed at.
+
+        ``branch-rate`` is deliberately not read. Branch coverage is not
+        enabled in this fleet's CI, so it is a constant zero and putting it on
+        the board would invent a finding.
+        """
+        blob = self._bytes(f"/repos/{full_name}/actions/artifacts/{artifact_id}/zip")
+        if blob is None:
+            return None
+        if len(blob) > _MAX_ARTIFACT_BYTES:
+            log.warning("%s: coverage artifact is %d bytes, skipping", full_name, len(blob))
+            return None
+        try:
+            return _coverage(blob)
+        except (zipfile.BadZipFile, ElementTree.ParseError, ValueError) as exc:
+            # A malformed report is CI's problem, not a reason to fail a
+            # refresh that has already gathered everything else.
+            log.warning("%s: could not read coverage artifact: %s", full_name, exc)
+            return None
+
     def open_pulls(self, full_name: str) -> tuple[int, list[PullRequest]]:
         """(total open PRs, detail for the first ``max_prs_per_repo``).
 
@@ -396,6 +481,22 @@ class GitHub:
         return "success"
 
 
+def _coverage(blob: bytes) -> tuple[float, int] | None:
+    """``(percent, lines measured)`` out of the coverage.xml in a zipped artifact."""
+    with zipfile.ZipFile(io.BytesIO(blob)) as bundle:
+        members = [m for m in bundle.infolist() if m.filename.endswith("coverage.xml")]
+        if not members:
+            return None
+        member = members[0]
+        if member.file_size > _MAX_UNPACKED_BYTES:
+            raise ValueError(f"coverage.xml unpacks to {member.file_size} bytes")
+        root = ElementTree.fromstring(bundle.read(member))
+    rate = root.get("line-rate")
+    if rate is None:
+        return None
+    return round(float(rate) * 100, 1), int(root.get("lines-valid") or 0)
+
+
 def _inconclusive(run: dict) -> bool:
     return (run.get("conclusion") or "") in INCONCLUSIVE_CONCLUSIONS
 
@@ -412,7 +513,9 @@ def _behind_count(tags: list[str], ref: str) -> int | None:
 
 
 def collect(
-    cfg: Config, ref_cache: dict[str, tuple[str, str]]
+    cfg: Config,
+    ref_cache: dict[str, tuple[str, str]],
+    coverage_cache: dict[str, tuple[int, tuple[float, int] | None]] | None = None,
 ) -> tuple[dict[str, RemoteRepo], GitHub, str, frozenset[str]]:
     """Build the remote half of the snapshot, keyed by ``owner/name``.
 
@@ -425,7 +528,15 @@ def collect(
     previous refresh. The pointer can only have changed if the branch head
     moved, so an unchanged sha skips the fetch and the steady-state cost of
     correctness is zero extra calls.
+
+    ``coverage_cache`` maps ``full_name -> (artifact_id, (percent, lines))``. Listing
+    the artifacts is one call per repo and always happens, so a report
+    published between refreshes is picked up; *downloading* one only happens
+    when the id has changed. That matters more than the call count - the
+    download is a zip, by far the largest response this collector handles, and
+    in the steady state it is never fetched at all.
     """
+    coverage_cache = coverage_cache or {}
     api = GitHub(cfg)
     tags = api.release_tags(cfg.template_repo)
     latest = tags[0] if tags else ""
@@ -460,6 +571,16 @@ def collect(
             ref = cached[1]
         else:
             ref = api.template_ref(full_name)
+
+        artifact = api.coverage_artifact(full_name, branch)
+        cached_coverage = coverage_cache.get(full_name)
+        if artifact and cached_coverage is not None and cached_coverage[0] == artifact:
+            measured = cached_coverage[1]
+        elif artifact:
+            measured = api.coverage_percent(full_name, artifact)
+        else:
+            measured = None
+        coverage, coverage_lines = measured if measured else (None, 0)
 
         workflows = tuple(
             WorkflowRun(
@@ -516,6 +637,9 @@ def collect(
             ci_duration=representative.duration if representative else 0.0,
             ci_url=representative.url if representative else "",
             workflows=workflows,
+            coverage=coverage,
+            coverage_lines=coverage_lines,
+            coverage_artifact=artifact,
             open_issues=open_issues,
             open_pulls_total=pulls_total,
             pulls=tuple(pulls),
