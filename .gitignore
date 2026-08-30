@@ -12,6 +12,7 @@ repos.yml
 .venv/
 .ruff_cache/
 .pytest_cache/
+_tests/
 __pycache__/
 
 # The built book; CI publishes it, nothing commits it.
