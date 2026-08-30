@@ -1,0 +1,118 @@
+# The book behind https://jebel-quant.github.io/monitoring/.
+#
+# Deliberately self-contained rather than `INHERIT: docs/mkdocs-base.yml` like
+# the rhiza-managed repos in this org: nothing syncs a base file into here, so
+# an INHERIT line would point at a file that does not exist. The theme block
+# below is kept deliberately close to the org's base so the book looks like the
+# others; if this repo is ever brought under rhiza, replace it with the INHERIT.
+
+site_name: Fleet monitoring
+site_description: >-
+  Prometheus and Grafana monitoring for a repo fleet - template drift, CI on the
+  default branch, open pull requests, and the working copies on your machine.
+site_url: https://jebel-quant.github.io/monitoring/
+site_author: Jebel Quant
+
+repo_url: https://github.com/Jebel-Quant/monitoring
+repo_name: Jebel-Quant/monitoring
+edit_uri: edit/main/docs/
+
+copyright: Jebel Quant
+
+docs_dir: docs
+site_dir: _book
+
+# Fail the build on a link to a page that is not there. The docs were split out
+# of one long README, so a stale relative link is the most likely way this rots.
+strict: true
+
+theme:
+  name: material
+  language: en
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.code.annotate
+    - content.code.copy
+    - content.code.select
+    - content.footnote.tooltips
+    - content.tabs.link
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.path
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  logo: https://jebel-quant.github.io/rhiza/assets/rhiza-logo.svg
+  favicon: https://jebel-quant.github.io/rhiza/assets/rhiza-logo.svg
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Jebel-Quant/monitoring
+      name: Jebel-Quant/monitoring on GitHub
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+  - pymdownx.snippets:
+      base_path: ["."]
+
+plugins:
+  - search
+
+nav:
+  - Start here: index.md
+  - Configuration: configuration.md
+  - What it watches: metrics.md
+  - The dashboard: dashboard.md
+  - Serving it publicly: serving.md
+  - Day to day: operations.md
