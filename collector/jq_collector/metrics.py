@@ -115,6 +115,37 @@ def render(snap: Snapshot):
         ["repo"],
     )
 
+    # -- default-branch protection ---------------------------------------
+    # Absent, not zero, when GitHub would not say. `absent` and `0` are
+    # distinguishable in PromQL; a zero here would be read as a finding.
+    protected = _gauge(
+        "jq_branch_protected",
+        "1 if the default branch is protected. Absent when the token cannot see protection.",
+        ["repo"],
+    )
+    required_reviews = _gauge(
+        "jq_branch_required_reviews",
+        "Approving reviews required to merge into the default branch.",
+        ["repo"],
+    )
+    force_push = _gauge(
+        "jq_branch_allows_force_push",
+        "1 if the protected default branch still allows force pushes.",
+        ["repo"],
+    )
+
+    # -- Dependabot -------------------------------------------------------
+    alerts_enabled = _gauge(
+        "jq_dependabot_alerts_enabled",
+        "1 if Dependabot alerts are on for the repo.",
+        ["repo"],
+    )
+    alerts = _gauge(
+        "jq_dependabot_open_alerts",
+        "Open Dependabot alerts by severity. Absent when alerts are disabled.",
+        ["repo", "severity"],
+    )
+
     # -- CI on the default branch ----------------------------------------
     ci_info = _gauge(
         "jq_ci_last_run_info",
@@ -243,6 +274,22 @@ def render(snap: Snapshot):
 
         if remote is not None:
             pushed.add_metric(ident, remote.pushed_at)
+            if remote.protected is not None:
+                protected.add_metric(ident, 1 if remote.protected else 0)
+                required_reviews.add_metric(ident, remote.required_reviews)
+                force_push.add_metric(ident, 1 if remote.allows_force_push else 0)
+
+            alerts_enabled.add_metric(ident, 1 if remote.alerts_enabled else 0)
+            if remote.alerts_enabled:
+                # Zero-fill the severities GitHub uses, so a repo that has just
+                # cleared its criticals reads as 0 rather than dropping out of
+                # the query and leaving the last non-zero value on the graph.
+                counts = dict(remote.alerts)
+                for severity in ("critical", "high", "medium", "low"):
+                    alerts.add_metric([*ident, severity], counts.pop(severity, 0))
+                for severity, count in sorted(counts.items()):
+                    alerts.add_metric([*ident, severity], count)
+
             managed.add_metric(ident, 1 if remote.rhiza_managed else 0)
             if remote.rhiza_ref:
                 ref_info.add_metric([*ident, remote.rhiza_ref], 1)
@@ -331,6 +378,11 @@ def render(snap: Snapshot):
         cloned,
         pushed,
         managed,
+        protected,
+        required_reviews,
+        force_push,
+        alerts_enabled,
+        alerts,
         ref_info,
         behind,
         ci_info,

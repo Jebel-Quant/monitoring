@@ -127,3 +127,64 @@ def test_a_merged_pr_reported_twice_yields_one_series():
     )
     lines = [x for x in expose(snap) if x.startswith("jq_merged_pull_request_timestamp_seconds")]
     assert len(lines) == 1
+
+
+def test_protection_is_absent_rather_than_zero_when_unknown():
+    """A token without admin 404s exactly like an unprotected branch.
+
+    Exporting 0 there would put every repo on the "unprotected" list on the
+    strength of a permission gap, which is a finding the board invented.
+    """
+    lines = expose(Snapshot(remote={"o/r": RemoteRepo(name="r", owner="o", protected=None)}))
+    assert not [ln for ln in lines if ln.startswith("jq_branch_protected")]
+
+
+def test_protection_details_are_exported_when_known():
+    lines = expose(
+        Snapshot(
+            remote={
+                "o/r": RemoteRepo(
+                    name="r",
+                    owner="o",
+                    protected=True,
+                    required_reviews=1,
+                    allows_force_push=True,
+                )
+            }
+        )
+    )
+    assert 'jq_branch_protected{repo="o/r"} 1.0' in lines
+    assert 'jq_branch_required_reviews{repo="o/r"} 1.0' in lines
+    # Protected but still force-pushable is the interesting case: the tile
+    # would otherwise read as green on a branch anyone can rewrite.
+    assert 'jq_branch_allows_force_push{repo="o/r"} 1.0' in lines
+
+
+def test_disabled_dependabot_is_not_reported_as_zero_alerts():
+    """ "No alerts" and "nobody is looking" must not render as the same tile."""
+    lines = expose(Snapshot(remote={"o/r": RemoteRepo(name="r", owner="o", alerts_enabled=False)}))
+    assert 'jq_dependabot_alerts_enabled{repo="o/r"} 0.0' in lines
+    assert not [ln for ln in lines if ln.startswith("jq_dependabot_open_alerts")]
+
+
+def test_open_alerts_zero_fill_the_known_severities():
+    """A cleared severity must report 0, not vanish and strand its last value."""
+    lines = expose(
+        Snapshot(
+            remote={
+                "o/r": RemoteRepo(name="r", owner="o", alerts_enabled=True, alerts=(("high", 3),))
+            }
+        )
+    )
+    assert 'jq_dependabot_open_alerts{repo="o/r",severity="high"} 3.0' in lines
+    assert 'jq_dependabot_open_alerts{repo="o/r",severity="critical"} 0.0' in lines
+
+
+def test_unprotected_is_a_fact_not_a_gap():
+    """GitHub says "Branch not protected" outright; that must reach the board.
+
+    Reporting it as unknown would leave the unprotected repos - here, nearly
+    the whole fleet - invisible on the one metric that exists to show them.
+    """
+    lines = expose(Snapshot(remote={"o/r": RemoteRepo(name="r", owner="o", protected=False)}))
+    assert 'jq_branch_protected{repo="o/r"} 0.0' in lines

@@ -1,10 +1,12 @@
 """Read the state of the repos as GitHub sees them.
 
-Per refresh this costs roughly ``3 * repos + open_pull_requests`` REST calls
-(one branch, one workflow-run and one pull listing each, plus a check-run
-listing per open PR), which at the default five-minute cadence sits well inside
-the authenticated 5000/hour budget. ``jq_github_rate_limit_remaining`` is
-exported so the headroom is visible rather than assumed.
+Per refresh this costs roughly ``5 * repos + workflows + open_pull_requests``
+REST calls (one branch, one protection, one alert listing, one workflow-run and
+one pull listing each, plus a check-run listing per open PR). There are no
+conditional requests, so the cost scales with the fleet and does not fall when
+nothing has changed - see JQ_GITHUB_INTERVAL before growing either.
+``jq_github_rate_limit_remaining`` is exported so the headroom is visible
+rather than assumed.
 """
 
 from __future__ import annotations
@@ -130,6 +132,48 @@ class GitHub:
                 )
 
         return repos
+
+    def branch_protection(self, full_name: str, branch: str) -> tuple[dict | None, bool]:
+        """``(protection, known)`` for one branch.
+
+        The endpoint 404s both for an unprotected branch and for a token
+        without admin, but the bodies differ: an unprotected branch says
+        "Branch not protected", where a permission gap does not. Reading the
+        message is what lets an unprotected branch be reported as a fact
+        rather than as a gap - and a fleet where nothing is protected is
+        exactly the case this metric exists to show.
+
+        ``known`` is False only when GitHub genuinely would not say, so the
+        caller never has to turn "we cannot see" into "it is unprotected".
+        """
+        response = self._get(f"/repos/{full_name}/branches/{branch}/protection")
+        if response.status_code == 200:
+            return response.json(), True
+        if response.status_code == 404:
+            try:
+                message = str((response.json() or {}).get("message", ""))
+            except ValueError:
+                message = ""
+            if "not protected" in message.lower():
+                return None, True
+            log.info("%s protection unreadable: %s", full_name, message or "404")
+        return None, False
+
+    def open_alerts(self, full_name: str) -> dict[str, int] | None:
+        """Open Dependabot alerts by severity, or None when the feature is off.
+
+        A repo with alerts disabled 404s exactly like one with none open, so
+        None and {} are kept distinct all the way to the exposition.
+        """
+        raw = self._json(f"/repos/{full_name}/dependabot/alerts", state="open", per_page=100)
+        if not isinstance(raw, list):
+            return None
+        counts: dict[str, int] = {}
+        for alert in raw:
+            advisory = alert.get("security_advisory") or {}
+            severity = str(advisory.get("severity") or "unknown").lower()
+            counts[severity] = counts.get(severity, 0) + 1
+        return counts
 
     def release_tags(self, full_name: str) -> list[str]:
         """Published release tags for a repo, newest first."""
@@ -420,6 +464,12 @@ def collect(
         rest = sorted(workflows, key=lambda w: w.finished_at, reverse=True)
         representative = failing[0] if failing else (rest[0] if rest else None)
 
+        protection, protection_known = api.branch_protection(full_name, branch)
+        reviews = (protection or {}).get("required_pull_request_reviews") or {}
+        force = (protection or {}).get("allow_force_pushes") or {}
+
+        alerts = api.open_alerts(full_name)
+
         pulls_total, pulls = api.open_pulls(full_name)
         merged = api.recent_merges(full_name, cfg.recent_merges_per_repo)
         # GitHub's open_issues_count includes pull requests; subtract them to
@@ -434,6 +484,11 @@ def collect(
             archived=bool(raw.get("archived")),
             head_sha=head_sha,
             pushed_at=_ts(raw.get("pushed_at")),
+            protected=(protection is not None) if protection_known else None,
+            required_reviews=int(reviews.get("required_approving_review_count") or 0),
+            allows_force_push=bool(force.get("enabled")),
+            alerts_enabled=alerts is not None,
+            alerts=tuple(sorted((alerts or {}).items())),
             rhiza_managed=bool(ref),
             rhiza_ref=ref,
             rhiza_behind=_behind_count(tags, ref),
