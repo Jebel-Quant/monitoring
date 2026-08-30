@@ -19,7 +19,7 @@ class PullRequest:
     draft: bool
     created_at: float
     updated_at: float
-    checks: str  # success | failure | pending | none
+    checks: str  # success | failure | cancelled | pending | none
     url: str
 
 

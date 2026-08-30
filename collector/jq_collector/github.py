@@ -27,6 +27,12 @@ log = logging.getLogger(__name__)
 # metrics.py because the representative-run choice depends on it.
 GOOD_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
 
+# Conclusions that are no verdict at all. A run cancelled by hand, or by a
+# concurrency group when a newer push superseded it, says nothing about the
+# branch - and `stale` means it never really ran. Treating either as red made a
+# repo failing for the sole reason that somebody stopped a job.
+INCONCLUSIVE_CONCLUSIONS = frozenset({"cancelled", "stale"})
+
 _ACCEPT = "application/vnd.github+json"
 _MAX_WORKERS = 8
 
@@ -259,6 +265,9 @@ class GitHub:
         Runs are also compared on ``updated_at`` rather than trusting feed
         order, because ``created_at`` ordering puts a long or re-run job below
         newer ones that finished earlier.
+
+        Inconclusive runs are skipped, so a workflow keeps showing its last real
+        verdict instead of being reported on a run that never reached one.
         """
         active = self.active_workflows(full_name)
 
@@ -274,6 +283,8 @@ class GitHub:
             wid = run.get("workflow_id")
             if active is not None and wid not in active:
                 continue  # workflow deleted or disabled since this run
+            if _inconclusive(run):
+                continue  # cancelled or stale: no verdict to report
             key = wid if wid is not None else run.get("name")
             current = newest.get(key)
             if current is None or _ts(run.get("updated_at")) > _ts(current.get("updated_at")):
@@ -290,11 +301,14 @@ class GitHub:
                     branch=branch,
                     status="completed",
                     exclude_pull_requests="true",
-                    per_page=1,
+                    # More than one, because the newest run may be a cancelled
+                    # one; the API has no "conclusive only" filter.
+                    per_page=5,
                 )
                 runs = (extra or {}).get("workflow_runs") or []
-                if runs:
-                    newest[wid] = runs[0]
+                conclusive = next((r for r in runs if not _inconclusive(r)), None)
+                if conclusive is not None:
+                    newest[wid] = conclusive
 
         return [
             {**run, "_name": (active or {}).get(wid) or run.get("name") or "unnamed"}
@@ -380,6 +394,10 @@ class GitHub:
         if conclusions & {"cancelled"}:
             return "cancelled"
         return "success"
+
+
+def _inconclusive(run: dict) -> bool:
+    return (run.get("conclusion") or "") in INCONCLUSIVE_CONCLUSIONS
 
 
 def _behind_count(tags: list[str], ref: str) -> int | None:

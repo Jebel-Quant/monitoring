@@ -7,7 +7,7 @@ import collections
 from prometheus_client import CollectorRegistry, generate_latest
 
 from jq_collector.metrics import FleetCollector
-from jq_collector.state import LocalRepo, RemoteRepo, Snapshot, Store, WorkflowRun
+from jq_collector.state import LocalRepo, PullRequest, RemoteRepo, Snapshot, Store, WorkflowRun
 
 
 def expose(snapshot: Snapshot) -> list[str]:
@@ -29,6 +29,19 @@ def repo(name: str, *workflows: WorkflowRun, conclusion: str = "success") -> Rem
         ci_conclusion=conclusion,
         ci_workflow="x",
         workflows=tuple(workflows),
+    )
+
+
+def pull(number: int, checks: str) -> PullRequest:
+    return PullRequest(
+        number=number,
+        title=f"pr {number}",
+        author="u",
+        draft=False,
+        created_at=1.0,
+        updated_at=1.0,
+        checks=checks,
+        url="",
     )
 
 
@@ -188,3 +201,39 @@ def test_unprotected_is_a_fact_not_a_gap():
     """
     lines = expose(Snapshot(remote={"o/r": RemoteRepo(name="r", owner="o", protected=False)}))
     assert 'jq_branch_protected{repo="o/r"} 0.0' in lines
+
+
+def test_cancelled_workflow_is_not_counted_as_failing():
+    """A cancelled run is no verdict: it must not turn the repo red, and it must
+    not appear in the failing-workflows table."""
+    snap = Snapshot(remote={"o/r": repo("o/r", wf("CI", "success"), wf("Docs", "cancelled"))})
+    lines = expose(snap)
+    ok = next(x for x in lines if x.startswith("jq_ci_last_run_success"))
+    count = next(x for x in lines if x.startswith("jq_ci_workflows_failing"))
+    assert ok.endswith(" 1.0"), ok
+    assert count.endswith(" 0.0"), count
+    assert not [x for x in lines if x.startswith("jq_ci_workflow_success") and "Docs" in x]
+
+
+def test_repo_whose_only_run_was_cancelled_reports_no_ci_state():
+    """Absent means "nothing to judge" - neither green nor red."""
+    snap = Snapshot(remote={"o/r": repo("o/r", wf("CI", "cancelled"), conclusion="cancelled")})
+    lines = expose(snap)
+    assert not [x for x in lines if x.startswith("jq_ci_last_run")]
+
+
+def test_pull_request_with_cancelled_checks_is_not_red():
+    """Same rule as the default branch: a stopped check is no verdict."""
+    snap = Snapshot(
+        remote={
+            "o/r": RemoteRepo(
+                name="r",
+                owner="o",
+                ci_conclusion="success",
+                ci_workflow="x",
+                pulls=(pull(1, "cancelled"), pull(2, "failure")),
+            )
+        }
+    )
+    line = next(x for x in expose(snap) if x.startswith("jq_open_pull_requests_failing"))
+    assert line.endswith(" 1.0"), line
