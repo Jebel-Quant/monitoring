@@ -182,3 +182,13 @@ def test_open_alerts_zero_fill_the_known_severities():
     )
     assert 'jq_dependabot_open_alerts{repo="o/r",severity="high"} 3.0' in lines
     assert 'jq_dependabot_open_alerts{repo="o/r",severity="critical"} 0.0' in lines
+
+
+def test_unprotected_is_a_fact_not_a_gap():
+    """GitHub says "Branch not protected" outright; that must reach the board.
+
+    Reporting it as unknown would leave the unprotected repos - here, nearly
+    the whole fleet - invisible on the one metric that exists to show them.
+    """
+    lines = expose(Snapshot(remote={"o/r": RemoteRepo(name="r", owner="o", protected=False)}))
+    assert 'jq_branch_protected{repo="o/r"} 0.0' in lines

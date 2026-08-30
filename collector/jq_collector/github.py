@@ -133,16 +133,31 @@ class GitHub:
 
         return repos
 
-    def branch_protection(self, full_name: str, branch: str) -> dict | None:
-        """Protection on one branch, or None when GitHub will not say.
+    def branch_protection(self, full_name: str, branch: str) -> tuple[dict | None, bool]:
+        """``(protection, known)`` for one branch.
 
         The endpoint 404s both for an unprotected branch and for a token
-        without admin on the repo, and the two are indistinguishable from the
-        response alone. Returning None for both keeps the caller from turning
-        "we cannot see" into "it is unprotected" - a false finding is worse
-        than a gap on a board meant to drive real changes.
+        without admin, but the bodies differ: an unprotected branch says
+        "Branch not protected", where a permission gap does not. Reading the
+        message is what lets an unprotected branch be reported as a fact
+        rather than as a gap - and a fleet where nothing is protected is
+        exactly the case this metric exists to show.
+
+        ``known`` is False only when GitHub genuinely would not say, so the
+        caller never has to turn "we cannot see" into "it is unprotected".
         """
-        return self._json(f"/repos/{full_name}/branches/{branch}/protection")  # type: ignore[return-value]
+        response = self._get(f"/repos/{full_name}/branches/{branch}/protection")
+        if response.status_code == 200:
+            return response.json(), True
+        if response.status_code == 404:
+            try:
+                message = str((response.json() or {}).get("message", ""))
+            except ValueError:
+                message = ""
+            if "not protected" in message.lower():
+                return None, True
+            log.info("%s protection unreadable: %s", full_name, message or "404")
+        return None, False
 
     def open_alerts(self, full_name: str) -> dict[str, int] | None:
         """Open Dependabot alerts by severity, or None when the feature is off.
@@ -451,7 +466,7 @@ def collect(
         rest = sorted(workflows, key=lambda w: w.finished_at, reverse=True)
         representative = failing[0] if failing else (rest[0] if rest else None)
 
-        protection = api.branch_protection(full_name, branch)
+        protection, protection_known = api.branch_protection(full_name, branch)
         reviews = (protection or {}).get("required_pull_request_reviews") or {}
         force = (protection or {}).get("allow_force_pushes") or {}
 
@@ -471,7 +486,7 @@ def collect(
             archived=bool(raw.get("archived")),
             head_sha=head_sha,
             pushed_at=_ts(raw.get("pushed_at")),
-            protected=None if protection is None else True,
+            protected=(protection is not None) if protection_known else None,
             required_reviews=int(reviews.get("required_approving_review_count") or 0),
             allows_force_push=bool(force.get("enabled")),
             alerts_enabled=alerts is not None,

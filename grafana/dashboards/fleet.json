@@ -560,13 +560,261 @@
       "id": 19
     },
     {
+      "type": "stat",
+      "title": "Default branches unprotected",
+      "description": "Repos GitHub reports as having no protection on their default branch. Repos whose protection is not visible to the token are excluded, so this never counts a permission gap as a finding.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 11
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_branch_protected{repo=~\"$repo\"} == bool 0)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Show the repos behind this number",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=108&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "id": 533
+    },
+    {
+      "type": "stat",
+      "title": "Protected but force-pushable",
+      "description": "Protected default branches that still allow force pushes - the history can be rewritten despite the protection, which a green 'protected' tile hides.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 11
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_branch_allows_force_push{repo=~\"$repo\"} == bool 1)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Show the repos behind this number",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=108&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "id": 534
+    },
+    {
+      "type": "stat",
+      "title": "Dependabot off",
+      "description": "Repos with Dependabot alerts disabled. Not the same as having no alerts: nothing is looking, so the zero on the next tile says nothing about them.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 11
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_dependabot_alerts_enabled{repo=~\"$repo\"} == bool 0)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Show the repos behind this number",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=109&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "id": 535
+    },
+    {
+      "type": "stat",
+      "title": "Open Dependabot alerts",
+      "description": "Open alerts across repos that have Dependabot enabled, all severities.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 11
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_dependabot_open_alerts{repo=~\"$repo\"})",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 1
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Show the repos behind this number",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=109&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "id": 536
+    },
+    {
       "type": "row",
       "title": "Trend and CI history",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 16
       },
       "collapsed": false,
       "panels": [],
@@ -580,7 +828,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 12
+        "y": 17
       },
       "datasource": {
         "type": "prometheus",
@@ -688,7 +936,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 25
       },
       "collapsed": true,
       "panels": [
@@ -893,7 +1141,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 26
       },
       "collapsed": false,
       "panels": [],
@@ -906,7 +1154,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 27
       },
       "datasource": {
         "type": "prometheus",
@@ -1150,7 +1398,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 41
       },
       "datasource": {
         "type": "prometheus",
@@ -1405,7 +1653,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 53
       },
       "datasource": {
         "type": "prometheus",
@@ -1549,7 +1797,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 59
+        "y": 64
       },
       "datasource": {
         "type": "prometheus",
@@ -1847,7 +2095,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 75
+        "y": 80
       },
       "collapsed": true,
       "panels": [
@@ -2697,6 +2945,234 @@
               }
             ]
           }
+        },
+        {
+          "id": 108,
+          "type": "table",
+          "title": "Repos with an unprotected default branch",
+          "description": "Reported by GitHub as 'Branch not protected' - a fact, not a permission gap. Repos whose protection the token cannot read are absent from this table rather than listed as unprotected.",
+          "gridPos": {
+            "h": 12,
+            "w": 24,
+            "x": 0,
+            "y": 98
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "jq-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "jq_branch_protected{repo=~\"$repo\"} == 0",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true,
+                  "fleet": true
+                },
+                "indexByName": {
+                  "repo": 0,
+                  "Value": 1
+                },
+                "renameByName": {
+                  "repo": "Repo",
+                  "Value": "Protected"
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "sort": [
+                  {
+                    "field": "Repo",
+                    "desc": false
+                  }
+                ]
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "footer": {
+              "show": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Repo"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 260
+                  },
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Open on GitHub",
+                        "url": "https://github.com/${__value.text}",
+                        "targetBlank": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Protected"
+                },
+                "properties": [
+                  {
+                    "id": "custom.align",
+                    "value": "right"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 109,
+          "type": "table",
+          "title": "Open Dependabot alerts by repo",
+          "description": "Only repos with alerts enabled appear. A repo with Dependabot switched off has no counts to show and is listed on the 'Dependabot off' tile instead.",
+          "gridPos": {
+            "h": 12,
+            "w": 24,
+            "x": 0,
+            "y": 98
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "jq-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "jq_dependabot_open_alerts{repo=~\"$repo\"} > 0",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true,
+                  "fleet": true
+                },
+                "indexByName": {
+                  "repo": 0,
+                  "severity": 1,
+                  "Value": 2
+                },
+                "renameByName": {
+                  "repo": "Repo",
+                  "Value": "Open alerts",
+                  "severity": "Severity"
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "sort": [
+                  {
+                    "field": "Repo",
+                    "desc": false
+                  }
+                ]
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "footer": {
+              "show": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Repo"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 260
+                  },
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Open on GitHub",
+                        "url": "https://github.com/${__value.text}",
+                        "targetBlank": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Open alerts"
+                },
+                "properties": [
+                  {
+                    "id": "custom.align",
+                    "value": "right"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  }
+                ]
+              }
+            ]
+          }
         }
       ]
     },
@@ -2707,7 +3183,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 81
       },
       "collapsed": false,
       "panels": [],
@@ -2721,7 +3197,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 77
+        "y": 82
       },
       "datasource": {
         "type": "prometheus",
@@ -2787,7 +3263,7 @@
         "h": 13,
         "w": 10,
         "x": 0,
-        "y": 81
+        "y": 86
       },
       "datasource": {
         "type": "prometheus",
@@ -2862,7 +3338,7 @@
         "h": 13,
         "w": 14,
         "x": 10,
-        "y": 81
+        "y": 86
       },
       "datasource": {
         "type": "prometheus",
