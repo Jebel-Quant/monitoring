@@ -7,7 +7,15 @@ import collections
 from prometheus_client import CollectorRegistry, generate_latest
 
 from jq_collector.metrics import FleetCollector
-from jq_collector.state import LocalRepo, PullRequest, RemoteRepo, Snapshot, Store, WorkflowRun
+from jq_collector.state import (
+    LocalRepo,
+    PullRequest,
+    RemoteRepo,
+    Snapshot,
+    SourceHealth,
+    Store,
+    WorkflowRun,
+)
 
 
 def expose(snapshot: Snapshot) -> list[str]:
@@ -237,3 +245,112 @@ def test_pull_request_with_cancelled_checks_is_not_red():
     )
     line = next(x for x in expose(snap) if x.startswith("jq_open_pull_requests_failing"))
     assert line.endswith(" 1.0"), line
+
+
+# -- every optional field, present ------------------------------------------
+#
+# Most of the exposition is guarded: a field that GitHub or git would not say is
+# left out rather than exported as zero, and the tests above pin the absent
+# side of each of those guards. This pins the other side. It is one fixture
+# rather than a test per field because the risk being covered is uniform - a
+# guard whose body was never executed - and twelve near-identical tests would
+# obscure that rather than sharpen it.
+
+
+def full_remote() -> RemoteRepo:
+    return RemoteRepo(
+        name="rhiza",
+        owner="Jebel-Quant",
+        default_branch="main",
+        visibility="public",
+        head_sha="abc123",
+        pushed_at=1000.0,
+        protected=True,
+        required_reviews=2,
+        allows_force_push=False,
+        alerts_enabled=True,
+        # `moderate` is not one of the four zero-filled severities, so it takes
+        # the sorted-remainder branch.
+        alerts=(("critical", 1), ("moderate", 3)),
+        rhiza_managed=True,
+        rhiza_ref="v1.7.1",
+        rhiza_behind=2,
+        coverage=87.3,
+        coverage_lines=472,
+        coverage_artifact=99,
+        ci_conclusion="success",
+        ci_workflow="ci",
+        ci_finished_at=900.0,
+        ci_duration=42.0,
+        workflows=(wf("ci", "success"),),
+        open_issues=4,
+        open_pulls_total=1,
+        pulls=(pull(7, "success"),),
+    )
+
+
+def full_local() -> LocalRepo:
+    return LocalRepo(
+        name="rhiza",
+        path="/repos/Jebel-Quant/rhiza",
+        owner="Jebel-Quant",
+        branch="main",
+        dirty_files=1,
+        untracked_files=2,
+        ahead=3,
+        behind=4,
+        stashes=5,
+        last_commit_at=800.0,
+        fetch_age=60.0,
+        head_sha="abc123",
+        default_branch_sha="abc123",
+        rhiza_ref="v1.7.0",
+        code_lines=1477,
+        test_lines=15186,
+        commits_30d=124,
+        commits_since_release=0,
+        last_release="v1.7.1",
+    )
+
+
+def test_every_optional_field_is_exported_when_present():
+    lines = expose(
+        Snapshot(
+            remote={"Jebel-Quant/rhiza": full_remote()},
+            local={"Jebel-Quant/rhiza": full_local()},
+            latest_template_ref="v1.7.1",
+            health={"github": SourceHealth(last_success=1.0, last_duration=2.0, errors=3)},
+        )
+    )
+    body = "\n".join(lines)
+
+    for metric in (
+        "jq_template_latest_release_info",
+        "jq_collector_last_success_timestamp_seconds",
+        "jq_collector_refresh_duration_seconds",
+        "jq_rhiza_template_ref_info",
+        "jq_rhiza_releases_behind",
+        "jq_ci_coverage_percent",
+        "jq_ci_coverage_lines",
+        "jq_local_ahead_commits",
+        "jq_local_behind_commits",
+        "jq_local_template_ref_info",
+        "jq_local_fetch_age_seconds",
+        "jq_local_default_branch_synced",
+        "jq_local_commits_since_release",
+        "jq_local_last_release_info",
+    ):
+        assert any(ln.startswith(metric) for ln in lines), f"{metric} missing:\n{body}"
+
+    # The remainder severity is exported after the four zero-filled ones.
+    assert 'jq_dependabot_open_alerts{repo="Jebel-Quant/rhiza",severity="moderate"} 3.0' in body
+    # In sync: the clone's default-branch sha matches what GitHub reports.
+    assert 'jq_local_default_branch_synced{repo="Jebel-Quant/rhiza"} 1.0' in body
+
+
+def test_a_source_that_has_never_refreshed_reports_no_health():
+    """`health` is keyed per source; the absent one must not export a zero."""
+    lines = expose(Snapshot(health={"github": SourceHealth(last_success=1.0)}))
+
+    assert any('source="github"' in ln for ln in lines)
+    assert not any('source="local"' in ln for ln in lines)

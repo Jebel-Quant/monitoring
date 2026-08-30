@@ -73,3 +73,83 @@ def test_empty_repo_root_disables_local_scanning(tmp_path):
     cfg = Config()
     object.__setattr__(cfg, "repo_root", "")
     assert localgit.scan(cfg, {}) == {}
+
+
+@pytest.fixture
+def reloaded_config(monkeypatch):
+    """Build a Config with a given environment.
+
+    Most field defaults bind at *import*, not per instance - only the three
+    using `default_factory` re-read the environment when Config() is called. So
+    varying one of the others means re-importing the module, which is what
+    `test_public_only_reads_the_environment` does by hand.
+
+    Teardown restores it. A reload leaves the class holding whatever the
+    environment said at that moment, so without this a later test reading a
+    default would see this test's value instead - including after a reload that
+    raised part-way through.
+    """
+    import importlib
+
+    import jq_collector.config as mod
+
+    def _load(**env):
+        for key, value in env.items():
+            if value is None:
+                monkeypatch.delenv(key, raising=False)
+            else:
+                monkeypatch.setenv(key, value)
+        importlib.reload(mod)
+        return mod.Config()
+
+    yield _load
+
+    monkeypatch.undo()
+    importlib.reload(mod)
+
+
+def test_an_interval_is_read_from_the_environment(reloaded_config):
+    assert reloaded_config(JQ_GITHUB_INTERVAL="900").github_interval == 900
+
+
+@pytest.mark.parametrize("raw", ["", "   "])
+def test_a_blank_interval_falls_back_to_the_default(reloaded_config, raw):
+    """Compose writes `JQ_X: ${JQ_X:-}` for an unset variable, so blank and
+    unset both reach here and must mean the same thing."""
+    assert reloaded_config(JQ_LOCAL_INTERVAL=raw).local_interval == 60
+
+
+def test_a_non_numeric_interval_refuses_to_start(reloaded_config):
+    """Louder than silently running at the default: a cadence someone meant to
+    change and mistyped would otherwise be invisible."""
+    with pytest.raises(ValueError):
+        reloaded_config(JQ_GITHUB_INTERVAL="ten minutes")
+
+
+def test_a_blank_csv_is_an_empty_fleet_not_a_one_repo_fleet(monkeypatch):
+    """`"".split(",")` is `[""]`, which would put a nameless repo on the board."""
+    monkeypatch.setenv("JQ_REPOS", " , ,")
+
+    assert Config().repos == ()
+
+
+def test_csv_entries_are_stripped(monkeypatch):
+    monkeypatch.setenv("JQ_IGNORE", " a/b , c/d ")
+
+    assert Config().ignore == ("a/b", "c/d")
+
+
+@pytest.mark.parametrize(
+    ("owner", "name", "ignored"),
+    [
+        ("o", "bare", True),
+        ("o", "full", True),
+        ("other", "bare", True),
+        ("other", "full", False),
+    ],
+)
+def test_is_ignored_accepts_a_bare_name_or_owner_slash_name(monkeypatch, owner, name, ignored):
+    """Both forms are documented, and a bare name matches in any owner."""
+    monkeypatch.setenv("JQ_IGNORE", "bare,o/full")
+
+    assert Config().is_ignored(owner, name) is ignored
