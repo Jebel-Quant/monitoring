@@ -674,7 +674,7 @@
           "links": [
             {
               "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=108&${__url_time_range}",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=111&${__url_time_range}",
               "targetBlank": false
             }
           ]
@@ -736,7 +736,7 @@
           "links": [
             {
               "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=109&${__url_time_range}",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=110&${__url_time_range}",
               "targetBlank": false
             }
           ]
@@ -3159,6 +3159,232 @@
                 "matcher": {
                   "id": "byName",
                   "options": "Open alerts"
+                },
+                "properties": [
+                  {
+                    "id": "custom.align",
+                    "value": "right"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 110,
+          "type": "table",
+          "title": "Repos with Dependabot alerts disabled",
+          "description": "Nothing is scanning these for vulnerable dependencies, so their absence from the open-alerts table means nobody looked - not that there is nothing to find.",
+          "gridPos": {
+            "h": 12,
+            "w": 24,
+            "x": 0,
+            "y": 98
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "jq-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "jq_dependabot_alerts_enabled{repo=~\"$repo\"} == 0",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true,
+                  "fleet": true
+                },
+                "indexByName": {
+                  "repo": 0,
+                  "Value": 1
+                },
+                "renameByName": {
+                  "repo": "Repo",
+                  "Value": "Alerts enabled"
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "sort": [
+                  {
+                    "field": "Repo",
+                    "desc": false
+                  }
+                ]
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "footer": {
+              "show": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Repo"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 260
+                  },
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Open on GitHub",
+                        "url": "https://github.com/${__value.text}",
+                        "targetBlank": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Alerts enabled"
+                },
+                "properties": [
+                  {
+                    "id": "custom.align",
+                    "value": "right"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 111,
+          "type": "table",
+          "title": "Protected branches that still allow force pushes",
+          "description": "These repos protect their default branch but permit rewriting its history, so they do not appear in the unprotected table - the weakness is inside the protection, not the absence of it.",
+          "gridPos": {
+            "h": 12,
+            "w": 24,
+            "x": 0,
+            "y": 98
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "jq-prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "jq_branch_allows_force_push{repo=~\"$repo\"} == 1",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true,
+                  "fleet": true
+                },
+                "indexByName": {
+                  "repo": 0,
+                  "Value": 1
+                },
+                "renameByName": {
+                  "repo": "Repo",
+                  "Value": "Allows force push"
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "sort": [
+                  {
+                    "field": "Repo",
+                    "desc": false
+                  }
+                ]
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "footer": {
+              "show": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Repo"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 260
+                  },
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Open on GitHub",
+                        "url": "https://github.com/${__value.text}",
+                        "targetBlank": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Allows force push"
                 },
                 "properties": [
                   {
