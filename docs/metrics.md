@@ -1,3 +1,9 @@
+---
+title: What it watches
+description: The four subjects the collector reports on, the metrics behind them, and why each is shaped that way.
+keywords: prometheus metrics, github actions, template drift, pull requests, git working copy, exporter
+---
+
 # What it watches, and why
 
 ## How it fits together

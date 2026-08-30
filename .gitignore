@@ -11,3 +11,6 @@ docker-compose.repos.yml
 .ruff_cache/
 .pytest_cache/
 __pycache__/
+
+# The built book; CI publishes it, nothing commits it.
+_book/

@@ -1,3 +1,9 @@
+---
+title: Day to day
+description: Why panels say No data, and what the Grafana sign-in button actually is.
+keywords: grafana login, no data, prometheus staleness, macos sleep, caffeinate
+---
+
 # Running it day to day
 
 ## The "Sign in" button

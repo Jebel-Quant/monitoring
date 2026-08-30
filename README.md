@@ -63,6 +63,8 @@ The board opens without signing in; `admin` / `admin` is only for settings.
 
 ## Docs
 
+Also published as a book: **<https://jebel-quant.github.io/monitoring/>**
+
 | | |
 |---|---|
 | [Configuration](docs/configuration.md) | `repos.yml`, `.env`, the API budget |

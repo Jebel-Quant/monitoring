@@ -1,3 +1,9 @@
+---
+title: Serving it publicly
+description: Public dashboards, the server stack, a VPS, TLS, and the preflight that must pass first.
+keywords: grafana public dashboard, anonymous access, docker compose, caddy, lets encrypt, vps
+---
+
 # Serving it world-readable
 
 ## From this machine

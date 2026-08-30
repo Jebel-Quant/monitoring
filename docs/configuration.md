@@ -1,3 +1,9 @@
+---
+title: Configuration
+description: repos.yml and .env, dropping and purging a repo, and the GitHub API budget.
+keywords: repos.yml, dotenv, github token, prometheus retention, api rate limit, purge series
+---
+
 # Configuration
 
 **Which repos** is `repos.yml`. **Everything else** is `.env` (see

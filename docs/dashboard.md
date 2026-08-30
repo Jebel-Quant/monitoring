@@ -1,3 +1,9 @@
+---
+title: The dashboard
+description: Reading the tiles, editing the JSON, alerting, and the PromQL traps worth not re-introducing.
+keywords: grafana dashboard, promql, panel json, alert rules, state timeline, group_left
+---
+
 # The dashboard
 
 ## Clicking a tile

@@ -1,0 +1,62 @@
+# Builds the book on every push and pull request, and publishes it to GitHub
+# Pages from main only.
+#
+# Building on pull requests is the point: `strict: true` in mkdocs.yml turns a
+# broken relative link into a failed build, and these docs were split out of one
+# long README, so a stale link is the most likely way they rot. A PR that breaks
+# one fails here rather than shipping a 404.
+#
+# The org's rhiza-managed repos use the reusable `rhiza_book.yml`, which also
+# wires up coverage, test reports and marimo notebooks. This repo is not rhiza
+# managed and has none of those, so it builds the site directly.
+name: Book
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: book-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Pinned, because an unpinned theme turns an unrelated upstream release
+      # into a red build on a PR that only touched the collector.
+      - name: Build
+        run: uvx --with mkdocs-material==9.6.14 mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _book
+
+  deploy:
+    name: deploy
+    # Only from main, and never from a fork's pull request - a fork must not be
+    # able to publish to this org's Pages site.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
