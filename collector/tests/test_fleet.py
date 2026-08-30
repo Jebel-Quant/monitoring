@@ -436,44 +436,40 @@ def test_a_directory_that_is_not_a_checkout_fails(gen_repos, tmp_path):
         gen_repos.resolve({"path": str(tmp_path / "empty")}, 1)
 
 
-def test_env_mode_prints_the_fleet_and_the_paths_and_writes_nothing(
+def test_it_prints_the_fleet_and_the_paths_and_writes_nothing(
     gen_repos, tmp_path, monkeypatch, capsys
 ):
     """Both lines must come from repos.yml, not from anyone's memory.
 
     Retyping either is how they drift: a repo added here never reaches the
-    board and nothing reports the difference. The paths line is what lets a
-    collector running outside the container find a checkout that does not sit
-    at <root>/<owner>/<name> - and a repo with no checkout must not appear in
-    it at all. --env must also leave the compose override alone, so it is safe
-    to run on a machine that has no stack.
+    board and nothing reports the difference. The paths line is what lets the
+    collector find a checkout that does not sit at <root>/<owner>/<name>, and a
+    repo with no checkout must not appear in it at all. Nothing is written to
+    disk - scripts/collector.sh runs this at every launch and exports the
+    result, so there is no generated file in between to go stale.
     """
     path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
     source = tmp_path / "repos.yml"
     source.write_text(f"repos:\n  - path: {path}\n  - repo: cvxgrp/cvxsimulator\n")
-    target = tmp_path / "docker-compose.repos.yml"
     monkeypatch.setattr(gen_repos, "SOURCE", source)
-    monkeypatch.setattr(gen_repos, "TARGET", target)
-    monkeypatch.setattr(sys, "argv", ["gen-repos.py", "--env"])
+    monkeypatch.setattr(sys, "argv", ["gen-repos.py"])
 
     gen_repos.main()
 
-    lines = capsys.readouterr().out.strip().splitlines()
-    assert lines == [
+    assert capsys.readouterr().out.strip().splitlines() == [
         "JQ_REPOS=Jebel-Quant/rhiza,cvxgrp/cvxsimulator",
         f"JQ_REPO_PATHS=Jebel-Quant/rhiza={path}",
     ]
-    assert not target.exists()
+    assert list(tmp_path.glob("docker-compose*")) == []
 
 
-def test_env_mode_refuses_a_path_it_cannot_express(gen_repos, tmp_path, monkeypatch, capsys):
+def test_it_refuses_a_path_it_cannot_express(gen_repos, tmp_path, monkeypatch, capsys):
     """A comma is the separator, so a path holding one would read as two repos."""
     path = make_checkout(tmp_path, "Jebel-Quant", "rhi,za")
     source = tmp_path / "repos.yml"
     source.write_text(f"repos:\n  - path: {path}\n")
     monkeypatch.setattr(gen_repos, "SOURCE", source)
-    monkeypatch.setattr(gen_repos, "TARGET", tmp_path / "out.yml")
-    monkeypatch.setattr(sys, "argv", ["gen-repos.py", "--env"])
+    monkeypatch.setattr(sys, "argv", ["gen-repos.py"])
 
     with pytest.raises(SystemExit):
         gen_repos.main()

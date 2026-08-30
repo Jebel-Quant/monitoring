@@ -1,12 +1,14 @@
 .env
 
-# Your fleet and the mounts generated from it: both describe the folder layout
-# of one machine, which has no business in a public repo. Start from
-# repos.example.yml.
+# Your fleet: it describes the folder layout of one machine, which has no
+# business in a public repo. Start from repos.example.yml. Nothing is generated
+# from it any more - scripts/collector.sh reads it at every launch.
 repos.yml
-docker-compose.repos.yml
 
-# Left behind by running the collector natively instead of in its container.
+# Where the launchd agent's output goes.
+.collector-logs/
+
+# Left behind by running the collector, which is how it runs now.
 .venv/
 .ruff_cache/
 .pytest_cache/

@@ -1,37 +1,15 @@
-# The laptop stack. Not usable on its own - the fleet lives in repos.yml,
-# so bring it up with scripts/up.sh, or with:
+# Prometheus and Grafana. The collector is NOT here: it runs on the host, via
+# scripts/collector.sh, because it reads your working copies and a container can
+# only see them through bind mounts - which cannot name a checkout that sits
+# somewhere other than <root>/<owner>/<name>, and which are slow enough on
+# macOS to have needed a caching layer to work around.
 #
-#   python3 scripts/gen-repos.py
-#   docker compose -f docker-compose.yml -f docker-compose.repos.yml up -d
+#   ./scripts/up.sh          starts both halves
+#   docker compose up -d     starts only this half
 
 name: jq-monitoring
 
 services:
-  collector:
-    build: ./collector
-    container_name: jq-collector
-    restart: unless-stopped
-    environment:
-      GITHUB_TOKEN: ${GITHUB_TOKEN:?set GITHUB_TOKEN in monitoring/.env - scripts/up.sh does it for you}
-      # JQ_REPOS and the per-repo bind mounts both come from
-      # docker-compose.repos.yml, generated from repos.yml. This file has no
-      # opinion about which repos are yours.
-      JQ_REPO_ROOT: /repos
-      JQ_TEMPLATE_REPO: ${JQ_TEMPLATE_REPO:-Jebel-Quant/rhiza}
-      JQ_GITHUB_INTERVAL: ${JQ_GITHUB_INTERVAL:-600}
-      JQ_LOCAL_INTERVAL: ${JQ_LOCAL_INTERVAL:-60}
-      JQ_MEASURE_MAX_AGE: ${JQ_MEASURE_MAX_AGE:-86400}
-      JQ_IGNORE: ${JQ_IGNORE:-}
-      JQ_PUBLIC_ONLY: ${JQ_PUBLIC_ONLY:-false}
-      JQ_LOG_LEVEL: ${JQ_LOG_LEVEL:-INFO}
-    # No volumes here on purpose. Every checkout is mounted individually by
-    # docker-compose.repos.yml, read-only: the collector reports on your working
-    # copies and must never be able to touch them, and mounting only what is
-    # listed means an unlisted repo is not merely filtered out - it is not even
-    # visible to the container. Every git call is --no-optional-locks too.
-    ports:
-      - "127.0.0.1:9109:9109"
-
   prometheus:
     image: prom/prometheus:v2.55.1
     container_name: jq-prometheus
@@ -46,8 +24,10 @@ services:
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
-    depends_on:
-      - collector
+    # Docker Desktop resolves host.docker.internal on its own; plain Docker on
+    # Linux does not, and without this the collector target is simply down.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   grafana:
     image: grafana/grafana:11.3.1
