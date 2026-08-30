@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 import subprocess
+import sys
 
 import pytest
 
@@ -192,3 +193,30 @@ def test_a_directory_that_is_not_a_checkout_fails(gen_repos, tmp_path):
     (tmp_path / "empty").mkdir()
     with pytest.raises(SystemExit):
         gen_repos.resolve({"path": str(tmp_path / "empty")}, 1)
+
+
+def test_env_mode_prints_the_list_and_writes_nothing(gen_repos, tmp_path, monkeypatch, capsys):
+    """A server names its fleet in .env, and that line must come from repos.yml.
+
+    Retyping it is how the two drift: a repo added here never reaches the board
+    and nothing reports the difference. --env must also leave the compose
+    override alone, so it is safe to run on a machine that has no stack.
+    """
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    source = tmp_path / "repos.yml"
+    source.write_text(f"repos:\n  - path: {path}\n  - repo: cvxgrp/cvxsimulator\n")
+    target = tmp_path / "docker-compose.repos.yml"
+    monkeypatch.setattr(gen_repos, "SOURCE", source)
+    monkeypatch.setattr(gen_repos, "TARGET", target)
+    monkeypatch.setattr(sys, "argv", ["gen-repos.py", "--env"])
+
+    gen_repos.main()
+
+    assert capsys.readouterr().out.strip() == "JQ_REPOS=Jebel-Quant/rhiza,cvxgrp/cvxsimulator"
+    assert not target.exists()
+
+
+def test_an_unknown_flag_is_refused(gen_repos, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["gen-repos.py", "--all"])
+    with pytest.raises(SystemExit):
+        gen_repos.main()
