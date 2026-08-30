@@ -57,7 +57,7 @@
       "title": "Repos monitored",
       "gridPos": {
         "h": 5,
-        "w": 4,
+        "w": 5,
         "x": 0,
         "y": 1
       },
@@ -98,8 +98,8 @@
       "title": "Open PRs",
       "gridPos": {
         "h": 5,
-        "w": 4,
-        "x": 4,
+        "w": 5,
+        "x": 5,
         "y": 1
       },
       "datasource": {
@@ -147,8 +147,8 @@
       "title": "Open issues",
       "gridPos": {
         "h": 5,
-        "w": 4,
-        "x": 8,
+        "w": 5,
+        "x": 10,
         "y": 1
       },
       "datasource": {
@@ -197,8 +197,8 @@
       "description": "Repos whose last completed run on the default branch did not pass.",
       "gridPos": {
         "h": 5,
-        "w": 4,
-        "x": 12,
+        "w": 5,
+        "x": 15,
         "y": 1
       },
       "datasource": {
@@ -252,72 +252,6 @@
         "overrides": []
       },
       "id": 3
-    },
-    {
-      "type": "stat",
-      "title": "Behind template",
-      "description": "Repos pinned to a template release older than the newest one.",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 16,
-        "y": 1
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(jq_rhiza_releases_behind{repo=~\"$repo\"} > bool 0)",
-          "instant": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ca30c",
-                "value": null
-              },
-              {
-                "color": "#fab219",
-                "value": 1
-              },
-              {
-                "color": "#ec835a",
-                "value": 5
-              }
-            ]
-          },
-          "links": [
-            {
-              "title": "Show the repos behind this number",
-              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=102&${__url_time_range}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "id": 4
     },
     {
       "type": "stat",
@@ -749,229 +683,12 @@
     },
     {
       "type": "row",
-      "title": "Template drift",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 20
-      },
-      "collapsed": false,
-      "panels": [],
-      "id": 8
-    },
-    {
-      "type": "bargauge",
-      "title": "Template releases behind",
-      "description": "How many releases were published after each repo's pinned ref. Repos pinned to a branch or a sha are absent - the pin is not comparable to a release.",
-      "gridPos": {
-        "h": 13,
-        "w": 10,
-        "x": 0,
-        "y": 21
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sort_desc(jq_rhiza_releases_behind{repo=~\"$repo\"})",
-          "instant": true,
-          "legendFormat": "{{repo}}"
-        }
-      ],
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "basic",
-        "valueMode": "text",
-        "showUnfilled": true,
-        "minVizWidth": 8,
-        "minVizHeight": 14,
-        "namePlacement": "left",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "min": 0,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#184f95",
-                "value": null
-              },
-              {
-                "color": "#256abf",
-                "value": 1
-              },
-              {
-                "color": "#3987e5",
-                "value": 2
-              },
-              {
-                "color": "#6da7ec",
-                "value": 3
-              },
-              {
-                "color": "#9ec5f4",
-                "value": 5
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "id": 9
-    },
-    {
-      "type": "table",
-      "title": "Pinned ref per repo",
-      "gridPos": {
-        "h": 13,
-        "w": 14,
-        "x": 10,
-        "y": 21
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "jq-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "jq_rhiza_template_ref_info{repo=~\"$repo\"}",
-          "instant": true,
-          "format": "table"
-        },
-        {
-          "refId": "B",
-          "expr": "jq_rhiza_releases_behind{repo=~\"$repo\"}",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "joinByField",
-          "options": {
-            "byField": "repo",
-            "mode": "outer"
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time 1": true,
-              "Time 2": true,
-              "Value #A": true,
-              "__name__ 1": true,
-              "__name__ 2": true,
-              "instance 1": true,
-              "instance 2": true,
-              "job 1": true,
-              "job 2": true,
-              "fleet 1": true,
-              "fleet 2": true
-            },
-            "renameByName": {
-              "repo": "Repo",
-              "ref": "Pinned ref",
-              "Value #B": "Releases behind"
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "sort": [
-              {
-                "field": "Releases behind",
-                "desc": true
-              }
-            ]
-          }
-        }
-      ],
-      "options": {
-        "showHeader": true,
-        "footer": {
-          "show": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "left",
-            "cellOptions": {
-              "type": "auto"
-            }
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Releases behind"
-            },
-            "properties": [
-              {
-                "id": "custom.align",
-                "value": "right"
-              },
-              {
-                "id": "custom.width",
-                "value": 140
-              },
-              {
-                "id": "noValue",
-                "value": "not a release"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Repo"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "Open on GitHub",
-                    "url": "https://github.com/${__value.text}",
-                    "targetBlank": true
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      "id": 10
-    },
-    {
-      "type": "row",
       "title": "Detail",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 20
       },
       "collapsed": false,
       "panels": [],
@@ -984,7 +701,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 21
       },
       "datasource": {
         "type": "prometheus",
@@ -1228,7 +945,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 35
       },
       "datasource": {
         "type": "prometheus",
@@ -1483,7 +1200,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 47
       },
       "datasource": {
         "type": "prometheus",
@@ -1627,7 +1344,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 58
       },
       "datasource": {
         "type": "prometheus",
@@ -1925,7 +1642,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 74
       },
       "collapsed": true,
       "panels": [
@@ -2785,7 +2502,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 89
+        "y": 75
       },
       "collapsed": true,
       "panels": [
@@ -2982,6 +2699,289 @@
         }
       ],
       "id": 526
+    },
+    {
+      "type": "row",
+      "title": "Template drift",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 76
+      },
+      "collapsed": false,
+      "panels": [],
+      "id": 8
+    },
+    {
+      "type": "stat",
+      "title": "Behind template",
+      "description": "Repos pinned to a template release older than the newest one.",
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 77
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jq_rhiza_releases_behind{repo=~\"$repo\"} > bool 0)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 1
+              },
+              {
+                "color": "#ec835a",
+                "value": 5
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "Show the repos behind this number",
+              "url": "/d/jq-fleet/jebel-quant-fleet?viewPanel=102&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "id": 4
+    },
+    {
+      "type": "bargauge",
+      "title": "Template releases behind",
+      "description": "How many releases were published after each repo's pinned ref. Repos pinned to a branch or a sha are absent - the pin is not comparable to a release.",
+      "gridPos": {
+        "h": 13,
+        "w": 10,
+        "x": 0,
+        "y": 81
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sort_desc(jq_rhiza_releases_behind{repo=~\"$repo\"})",
+          "instant": true,
+          "legendFormat": "{{repo}}"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "text",
+        "showUnfilled": true,
+        "minVizWidth": 8,
+        "minVizHeight": 14,
+        "namePlacement": "left",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#184f95",
+                "value": null
+              },
+              {
+                "color": "#256abf",
+                "value": 1
+              },
+              {
+                "color": "#3987e5",
+                "value": 2
+              },
+              {
+                "color": "#6da7ec",
+                "value": 3
+              },
+              {
+                "color": "#9ec5f4",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 9
+    },
+    {
+      "type": "table",
+      "title": "Pinned ref per repo",
+      "gridPos": {
+        "h": 13,
+        "w": 14,
+        "x": 10,
+        "y": 81
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "jq-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jq_rhiza_template_ref_info{repo=~\"$repo\"}",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "refId": "B",
+          "expr": "jq_rhiza_releases_behind{repo=~\"$repo\"}",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "repo",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Value #A": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "instance 1": true,
+              "instance 2": true,
+              "job 1": true,
+              "job 2": true,
+              "fleet 1": true,
+              "fleet 2": true
+            },
+            "renameByName": {
+              "repo": "Repo",
+              "ref": "Pinned ref",
+              "Value #B": "Releases behind"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Releases behind",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Releases behind"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              },
+              {
+                "id": "noValue",
+                "value": "not a release"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Repo"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open on GitHub",
+                    "url": "https://github.com/${__value.text}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "id": 10
     }
   ]
 }

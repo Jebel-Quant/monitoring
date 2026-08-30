@@ -75,12 +75,16 @@ def mission_control(dash: dict) -> None:
     # Data age is a verdict: stale data invalidates everything above it.
     restyle("Data age", lit=True, unit="s")
 
+    # "Behind template" is deliberately absent: it lives in the Template drift
+    # section at the bottom, not in the header. Most people reading this board
+    # do not use the template at all, and a headline tile implies otherwise.
+    # Listing it here would pin it back into the header - `placed` titles are
+    # positioned absolutely, everything else keeps its order from fleet.json.
     LAYOUT = {
-        "Repos monitored": (0, 1, 4, 5),
-        "Open PRs": (4, 1, 4, 5),
-        "Open issues": (8, 1, 4, 5),
-        "CI red on main": (12, 1, 4, 5),
-        "Behind template": (16, 1, 4, 5),
+        "Repos monitored": (0, 1, 5, 5),
+        "Open PRs": (5, 1, 5, 5),
+        "Open issues": (10, 1, 5, 5),
+        "CI red on main": (15, 1, 5, 5),
         "PRs with red checks": (20, 1, 4, 5),
         "Data age": (0, 6, 24, 3),
     }
