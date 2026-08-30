@@ -59,19 +59,40 @@ jobs:
     name: compose files parse
     runs-on: ubuntu-latest
     # The overlays only patch services, so they are not valid on their own -
-    # they are checked the way they are actually used. GITHUB_TOKEN is a
-    # required variable in the base file; any value satisfies interpolation.
+    # they are checked the way they are actually used. GITHUB_TOKEN and, for
+    # the server stack, JQ_REPOS are required variables; any value satisfies
+    # interpolation.
     env:
       GITHUB_TOKEN: dummy-value-for-interpolation-only
       GF_ADMIN_PASSWORD: dummy-value-for-interpolation-only
+      JQ_REPOS: Jebel-Quant/rhiza
     steps:
       - uses: actions/checkout@v4
-      - name: Base
-        run: docker compose -f docker-compose.yml config --quiet
+
+      # repos.yml is gitignored, so CI builds one the way a new user would and
+      # proves gen-repos.py emits an override that actually merges. Nothing
+      # else in CI reads it, so a malformed one would otherwise only surface
+      # on somebody's laptop.
+      - name: Generate the fleet override
+        run: |
+          pip install --quiet pyyaml
+          printf 'repos:\n' > repos.yml
+          for full in Jebel-Quant/rhiza cvxgrp/cvxsimulator; do
+            git init -q -b main "ci-checkouts/$full"
+            git -C "ci-checkouts/$full" remote add origin "https://github.com/$full.git"
+            printf '  - path: ci-checkouts/%s\n' "$full" >> repos.yml
+          done
+          # A repo with no checkout: GitHub panels only, no bind mount.
+          printf '  - repo: Jebel-Quant/actions\n' >> repos.yml
+          python3 scripts/gen-repos.py
+          cat docker-compose.repos.yml
+
+      - name: Base + fleet override
+        run: docker compose -f docker-compose.yml -f docker-compose.repos.yml config --quiet
       - name: Base + admin overlay
-        run: docker compose -f docker-compose.yml -f docker-compose.admin.yml config --quiet
+        run: docker compose -f docker-compose.yml -f docker-compose.repos.yml -f docker-compose.admin.yml config --quiet
       - name: Base + public overlay
-        run: docker compose -f docker-compose.yml -f docker-compose.public.yml config --quiet
+        run: docker compose -f docker-compose.yml -f docker-compose.repos.yml -f docker-compose.public.yml config --quiet
       - name: Server stack
         run: docker compose -f docker-compose.server.yml config --quiet
       - name: Server + TLS overlay

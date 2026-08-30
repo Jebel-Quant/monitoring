@@ -4,13 +4,35 @@ A Grafana board for the state of your repo fleet — template drift, CI on the
 default branch, open pull requests, and the working copies on this machine —
 with Prometheus keeping the history and six alert rules on top.
 
-Two kinds of repo are in scope: **whole orgs** (`Jebel-Quant`, swept in full) and
-**individually named repos** (`cvxgrp/cvxrisk`, `cvxgrp/simulator`,
-`cvxgrp/cvxcla`, `cvxgrp/cvxmarkowitz`). The second exists because cvxgrp has
-100+ repos and only four are yours.
+**The fleet is an explicit list.** `repos.yml` names every monitored repo, one
+entry per checkout on this machine:
 
-**Archived repos are never monitored.** They are dropped from the GitHub sweep
-*and* their local clones are skipped, so a checkout left on disk cannot keep a
+```yaml
+repos:
+  - path: ~/repos/jebel-quant/rhiza
+  - path: ~/repos/cvxgrp/cvxsimulator
+  - repo: Jebel-Quant/actions      # monitored, but not checked out here
+```
+
+`owner/name` is read from each checkout's `origin` remote, so the path is all
+you write. Nothing is discovered: a repo is on the board because it is in this
+file, and for no other reason. `scripts/up.sh` turns the file into
+`docker-compose.repos.yml`, which mounts each checkout **read-only** at
+`/repos/<owner>/<name>` — so an unlisted repo is not merely filtered out, it is
+never visible to the container at all.
+
+This replaced a whole-org GitHub sweep plus a directory walk under one mounted
+root. Both decided membership on their own: a new repo in the org arrived
+unasked, a shared org like cvxgrp dragged in 100+ repos that were not yours, and
+any checkout that happened to sit under the root joined the board because its
+origin looked right.
+
+Edit `repos.yml`, run `./scripts/up.sh` again, and the fleet is whatever you
+just wrote. Both halves of the collector read the same list, so the GitHub
+panels and the working-copy panels can never disagree about who is in scope.
+
+**Archived repos are never monitored.** They are dropped from the GitHub half
+*and* their local checkouts are skipped, so a checkout left on disk cannot keep a
 dead repo on the board — that gap kept `rhiza-brainbug` showing as the fleet's
 one red repo for a while after it was archived. Set `JQ_INCLUDE_ARCHIVED=true`
 to opt back in.
@@ -37,9 +59,14 @@ path. The script reports both numbers so the difference is visible rather than
 alarming.
 
 ```bash
+cp repos.example.yml repos.yml   # then list your checkouts
 ./scripts/up.sh     # builds, mints a token from `gh auth token`, starts everything
 ./scripts/down.sh   # stop; add --volumes to discard the history too
 ```
+
+`up.sh` creates `repos.yml` from the example on a first run and stops so you can
+edit it. Both `repos.yml` and the generated `docker-compose.repos.yml` are
+gitignored: they describe the folder layout of one machine.
 
 | | |
 |---|---|
@@ -207,19 +234,34 @@ your checkout is behind, not the repo.
 
 ## Configuration
 
-Everything lives in `.env` (see `.env.example`). The useful knobs:
+**Which repos** is `repos.yml`. **Everything else** is `.env` (see
+`.env.example`).
+
+### repos.yml
+
+| Key | | |
+|---|---|---|
+| `path` | | A checkout on this machine. `~` and paths relative to the repo both work. |
+| `repo` | | `owner/name`. Optional next to a `path` — it overrides the origin, which is what you want for a fork whose board should follow upstream. On its own it monitors a repo you have not cloned: GitHub panels are gathered, the working-copy panels stay empty for that row. |
+
+A bare string is shorthand for `path`. Duplicate entries, a path that is not a
+checkout, and an entry with neither key are all refused at generate time —
+better a refusal than a board that is quietly one repo short.
+
+### .env
 
 | Variable | Default | |
 |---|---|---|
-| `JQ_ORGS` | `Jebel-Quant` | Orgs swept in full, comma-separated. |
-| `JQ_REPOS` | the four cvxgrp repos | Individually named repos, as `owner/name`. Use this for orgs where only some repos are yours. |
+| `GITHUB_TOKEN` | — | Must be able to read every repo in `repos.yml`. `up.sh` mints one from `gh auth token`. |
 | `JQ_TEMPLATE_REPO` | `Jebel-Quant/rhiza` | Whose releases define "up to date", as `owner/name`. |
-| `JQ_IGNORE` | — | Repos to leave out, as bare names or `owner/name`. Applies to both the GitHub sweep and the local scan. |
-| `JQ_INCLUDE_ARCHIVED` | `false` | Archived repos are dropped from both the GitHub sweep and the local scan. |
-| `JQ_REPO_ROOT_HOST` | `../..` | Which host folder to mount. Defaults to all of `~/repos`. |
-| `JQ_SCAN_DEPTH` | `2` | How deep to look for clones, so `~/repos/<org>/<repo>` is found. |
+| `JQ_IGNORE` | — | Repos to drop without editing `repos.yml`, as bare names or `owner/name`. Applies to both halves. |
+| `JQ_INCLUDE_ARCHIVED` | `false` | Archived repos are dropped from both halves. |
+| `JQ_PUBLIC_ONLY` | `false` | Drop private repos entirely — not just their details, their existence. |
 | `JQ_GITHUB_INTERVAL` | `300` | Seconds between GitHub refreshes. |
 | `PROM_RETENTION` | `180d` | How much history to keep. |
+
+On the server stack there are no checkouts and so no `repos.yml`: the fleet is
+named directly in `JQ_REPOS`, a comma-separated list of `owner/name`.
 
 ### API budget
 
@@ -308,6 +350,7 @@ copies here, and strangers can reach it":
 | | |
 |---|---|
 | `JQ_REPO_ROOT` empty | local scanning skipped entirely — a clean no-op, not an error every minute |
+| the fleet is `JQ_REPOS` | no checkouts to derive it from, so the list is named directly rather than in `repos.yml` |
 | `JQ_PUBLIC_ONLY` forced on | private repos are never gathered, so they cannot leak |
 | only Grafana publishes a port | Prometheus and the collector talk over the compose network and are unreachable from outside |
 | anonymous off, public dashboards on | a public link serves one dashboard's queries with no datasource behind it |
@@ -331,9 +374,9 @@ GITHUB_TOKEN=github_pat_...        # public_repo scope is enough
 GF_ADMIN_PASSWORD=...              # 16+ chars; openssl rand -base64 24
 FLEET_DOMAIN=fleet.example.com
 ACME_EMAIL=you@example.com
-# Repos outside the swept org. Leave this out and they are silently absent -
-# the board simply reports a smaller fleet, with nothing to say it is short.
-JQ_REPOS=cvxgrp/cvxrisk,cvxgrp/simulator,cvxgrp/cvxcla,cvxgrp/cvxmarkowitz
+# The fleet. Required - there are no checkouts here to derive it from, and the
+# stack refuses to start without it rather than serving an empty board.
+JQ_REPOS=Jebel-Quant/rhiza,Jebel-Quant/actions,cvxgrp/cvxsimulator
 SETTINGS
 chmod 600 .env
 
@@ -345,7 +388,8 @@ it automatically, and it is gitignored.
 
 Note the token has to be able to read every repo named in `JQ_REPOS`. A
 fine-grained token scoped to one org cannot see another's, and the collector
-logs `named repo ... is not readable` when that happens.
+logs `listed repo ... is not readable` when that happens — one unreadable entry
+costs one row, not the whole board.
 
 Then reach Grafana, sign in as `admin`, open **Jebel-Quant Fleet (public)** →
 *Share* → *Public dashboard*, and share only that link.

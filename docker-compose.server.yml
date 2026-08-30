@@ -7,7 +7,9 @@
 # strangers can reach it":
 #
 #   * no bind mount and JQ_REPO_ROOT empty, so local scanning is skipped
-#     entirely rather than erroring once a minute
+#     entirely rather than erroring once a minute. There is no repos.yml here
+#     either: with no checkouts to point at, the fleet is named directly in
+#     JQ_REPOS as a comma-separated list of owner/name.
 #   * JQ_PUBLIC_ONLY is forced on, so private repos are never gathered at all
 #   * only Grafana publishes a port; Prometheus and the collector talk over the
 #     compose network and are unreachable from outside
@@ -25,8 +27,9 @@ services:
     restart: unless-stopped
     environment:
       GITHUB_TOKEN: ${GITHUB_TOKEN:?set GITHUB_TOKEN in the environment or a .env file}
-      JQ_ORGS: ${JQ_ORGS:-Jebel-Quant}
-      JQ_REPOS: ${JQ_REPOS:-}
+      # The fleet, as owner/name. Explicit here as on a laptop - the only
+      # difference is that a server has no checkouts to derive it from.
+      JQ_REPOS: ${JQ_REPOS:?set JQ_REPOS to a comma-separated list of owner/name}
       JQ_TEMPLATE_REPO: ${JQ_TEMPLATE_REPO:-Jebel-Quant/rhiza}
       JQ_GITHUB_INTERVAL: ${JQ_GITHUB_INTERVAL:-300}
       # No clones on a server. Empty means "skip local scanning".

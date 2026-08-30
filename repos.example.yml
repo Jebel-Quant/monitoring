@@ -1,0 +1,28 @@
+# The fleet. Copy to repos.yml and edit - repos.yml is gitignored, because the
+# folder layout of your machine is nobody else's business.
+#
+# One entry per monitored repo. `scripts/gen-repos.py` reads this file and
+# writes docker-compose.repos.yml, which mounts each checkout read-only at
+# /repos/<owner>/<name> and hands the collector the matching JQ_REPOS list.
+# scripts/up.sh runs it for you; run it again after editing this file.
+#
+# Nothing is discovered. A repo appears on the board because it is listed here,
+# and for no other reason.
+
+repos:
+  # The usual entry: a path to a checkout. `~` and paths relative to this file
+  # both work, and owner/name is read from the checkout's origin remote.
+  - path: ~/repos/jebel-quant/monitoring
+  - path: ~/repos/jebel-quant/rhiza
+
+  # Only some of a large shared org is yours, so name those repos one by one.
+  - path: ~/repos/cvxgrp/cvxsimulator
+
+  # Override the origin when the checkout is a fork and you want the board to
+  # follow upstream rather than your copy.
+  # - path: ~/repos/forks/cvxpy
+  #   repo: cvxpy/cvxpy
+
+  # A repo with no checkout on this machine. GitHub panels (CI, pull requests,
+  # template drift) are gathered; the working-copy panels stay empty for it.
+  # - repo: Jebel-Quant/actions
