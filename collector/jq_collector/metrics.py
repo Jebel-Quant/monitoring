@@ -21,6 +21,12 @@ from .state import Snapshot
 # Conclusions that mean "this pipeline did its job".
 _GOOD_CONCLUSIONS = {"success", "neutral", "skipped"}
 
+# Conclusions that are no verdict at all - a cancelled or superseded run. They
+# are neither green nor red, so they are left out of the exposition entirely,
+# the same way a workflow that never ran is. github.py already drops them when
+# it picks each workflow's latest run; this layer owns the exposition contract.
+_INCONCLUSIVE_CONCLUSIONS = {"cancelled", "stale"}
+
 
 def _gauge(name: str, doc: str, labels: list[str] | None = None) -> GaugeMetricFamily:
     return GaugeMetricFamily(name, doc, labels=labels or [])
@@ -303,6 +309,8 @@ def render(snap: Snapshot):
             # samples a scrape when the invariant was last broken upstream.
             unique: dict[str, object] = {}
             for wf in sorted(remote.workflows, key=lambda w: w.finished_at, reverse=True):
+                if wf.conclusion in _INCONCLUSIVE_CONCLUSIONS:
+                    continue
                 if wf.conclusion and wf.name not in unique:
                     unique[wf.name] = wf
 
@@ -313,7 +321,7 @@ def render(snap: Snapshot):
                 wf_ok.add_metric([*ident, wf.name], 1 if good else 0)
                 wf_at.add_metric([*ident, wf.name], wf.finished_at)
 
-            if remote.ci_conclusion:
+            if remote.ci_conclusion and remote.ci_conclusion not in _INCONCLUSIVE_CONCLUSIONS:
                 ci_info.add_metric([*ident, remote.ci_conclusion, remote.ci_workflow], 1)
                 # Green only when no workflow is red. Deriving this from a single
                 # run made a repo look green whenever some other workflow had run
@@ -325,10 +333,10 @@ def render(snap: Snapshot):
 
             pr_count.add_metric(ident, remote.open_pulls_total)
             issue_count.add_metric(ident, remote.open_issues)
-            pr_failing.add_metric(
-                ident,
-                sum(1 for p in remote.pulls if p.checks in ("failure", "cancelled")),
-            )
+            # Red means red. A cancelled check is no verdict - the same rule the
+            # default branch follows - so it does not make a pull request count
+            # as failing; the PR table still shows the word in its checks column.
+            pr_failing.add_metric(ident, sum(1 for p in remote.pulls if p.checks == "failure"))
             for pull in remote.pulls:
                 number = str(pull.number)
                 pr_info.add_metric(

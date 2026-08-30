@@ -143,3 +143,54 @@ def test_two_active_workflows_sharing_a_name_get_distinct_labels(make_client):
     )
     names = [r["_name"] for r in c.latest_runs("o/r", "main")]
     assert len(names) == len(set(names)), f"labels collide: {names}"
+
+
+def test_cancelled_run_falls_back_to_the_last_real_verdict(make_client):
+    """Stopping a job by hand, or a concurrency group killing it when the next
+    push lands, is not a failure. The workflow keeps its last conclusive run."""
+    c = make_client(
+        {
+            WFS: {"workflows": [workflow(1, "CI")]},
+            RUNS: {
+                "workflow_runs": [
+                    run(1, "CI", "cancelled", "2026-08-02T00:00:00Z"),
+                    run(1, "CI", "success", "2026-08-01T00:00:00Z"),
+                ]
+            },
+        }
+    )
+    got = c.latest_runs("o/r", "main")
+    assert [(r["_name"], r["conclusion"]) for r in got] == [("CI", "success")]
+
+
+def test_workflow_with_only_cancelled_runs_is_absent_not_red(make_client):
+    """No verdict at all reads like a workflow that never ran."""
+    c = make_client(
+        {
+            WFS: {"workflows": [workflow(1, "CI"), workflow(2, "Weekly")]},
+            RUNS: {"workflow_runs": [run(1, "CI", "success", "2026-08-01T00:00:00Z")]},
+            "/repos/o/r/actions/workflows/2/runs": {
+                "workflow_runs": [run(2, "Weekly", "cancelled", "2026-07-01T00:00:00Z")]
+            },
+        }
+    )
+    assert [r["_name"] for r in c.latest_runs("o/r", "main")] == ["CI"]
+
+
+def test_direct_fetch_skips_cancelled_runs(make_client):
+    """The targeted call asks for several runs precisely because the newest one
+    may be cancelled."""
+    c = make_client(
+        {
+            WFS: {"workflows": [workflow(1, "CI"), workflow(2, "Weekly")]},
+            RUNS: {"workflow_runs": [run(1, "CI", "success", "2026-08-01T00:00:00Z")]},
+            "/repos/o/r/actions/workflows/2/runs": {
+                "workflow_runs": [
+                    run(2, "Weekly", "cancelled", "2026-07-02T00:00:00Z"),
+                    run(2, "Weekly", "failure", "2026-07-01T00:00:00Z"),
+                ]
+            },
+        }
+    )
+    got = {r["_name"]: r["conclusion"] for r in c.latest_runs("o/r", "main")}
+    assert got == {"CI": "success", "Weekly": "failure"}

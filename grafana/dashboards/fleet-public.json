@@ -1668,7 +1668,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(time() - jq_pull_request_created_timestamp_seconds) * on(repo, number) group_left(title, author, checks) topk by (repo, number) (1, jq_pull_request_info{checks=~\"failure|cancelled\"})",
+          "expr": "(time() - jq_pull_request_created_timestamp_seconds) * on(repo, number) group_left(title, author, checks) topk by (repo, number) (1, jq_pull_request_info{checks=\"failure\"})",
           "instant": true,
           "format": "table"
         }
