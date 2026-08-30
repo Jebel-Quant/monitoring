@@ -9,8 +9,22 @@ global:
 
 scrape_configs:
   - job_name: jq-collector
+    # The collector runs on the host, not in this stack - it reads your working
+    # copies at their real paths, which a bind mount cannot express and which
+    # is far faster than one anyway. host.docker.internal is how a container
+    # reaches the machine it runs on; docker-compose.yml maps it on Linux,
+    # where it is not built in.
     static_configs:
-      - targets: ["collector:9109"]
+      - targets: ["host.docker.internal:9109"]
+    relabel_configs:
+      # There is exactly one collector, so `instance` carries no information -
+      # only where the process happened to be running. Left alone it is the
+      # scrape address, and moving the collector (container -> host, or back)
+      # silently forks every series in two: the board then joins a repo against
+      # itself and shows each one twice until the old series go stale. Pin it,
+      # and the history stays continuous across the move.
+      - target_label: instance
+        replacement: jq-collector
 
   - job_name: prometheus
     static_configs:

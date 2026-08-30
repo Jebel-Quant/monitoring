@@ -65,35 +65,42 @@ jobs:
         run: python3 scripts/check-dashboard.py
 
   compose:
-    name: compose files parse
+    name: compose and scripts
     runs-on: ubuntu-latest
-    # The overlays only patch services, so they are not valid on their own -
-    # they are checked the way they are actually used. GITHUB_TOKEN is a
-    # required variable; any value satisfies interpolation.
+    # GITHUB_TOKEN is a required variable in the compose file; any value
+    # satisfies interpolation.
     env:
       GITHUB_TOKEN: dummy-value-for-interpolation-only
     steps:
       - uses: actions/checkout@v4
 
+      - name: Compose files parse
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.admin.yml config --quiet
+
+      # The collector runs on the host now, so these are the entry points a
+      # user actually touches. A syntax error in one of them used to be caught
+      # by nothing at all.
+      - name: Shell scripts parse
+        run: for f in scripts/*.sh; do bash -n "$f"; done
+
       # repos.yml is gitignored, so CI builds one the way a new user would and
-      # proves gen-repos.py emits an override that actually merges. Nothing
-      # else in CI reads it, so a malformed one would otherwise only surface
-      # on somebody's laptop.
-      - name: Generate the fleet override
+      # proves gen-repos.py emits the two lines the collector reads - including
+      # for a checkout that does NOT sit at <root>/<owner>/<name>, which is the
+      # case the paths line exists for. Nothing else in CI reads repos.yml, so
+      # a malformed one would otherwise only surface on somebody's laptop.
+      - name: The fleet resolves to an environment
         run: |
           pip install --quiet pyyaml
           printf 'repos:\n' > repos.yml
-          for full in Jebel-Quant/rhiza cvxgrp/cvxsimulator; do
-            git init -q -b main "ci-checkouts/$full"
-            git -C "ci-checkouts/$full" remote add origin "https://github.com/$full.git"
-            printf '  - path: ci-checkouts/%s\n' "$full" >> repos.yml
-          done
-          # A repo with no checkout: GitHub panels only, no bind mount.
+          git init -q -b main nested/somewhere/rhiza
+          git -C nested/somewhere/rhiza remote add origin https://github.com/Jebel-Quant/rhiza.git
+          printf '  - path: nested/somewhere/rhiza\n' >> repos.yml
+          # A repo with no checkout: GitHub panels only, no path.
           printf '  - repo: Jebel-Quant/actions\n' >> repos.yml
-          python3 scripts/gen-repos.py
-          cat docker-compose.repos.yml
 
-      - name: Base + fleet override
-        run: docker compose -f docker-compose.yml -f docker-compose.repos.yml config --quiet
-      - name: Base + admin overlay
-        run: docker compose -f docker-compose.yml -f docker-compose.repos.yml -f docker-compose.admin.yml config --quiet
+          python3 scripts/gen-repos.py | tee env.out
+          grep -qx 'JQ_REPOS=Jebel-Quant/rhiza,Jebel-Quant/actions' env.out
+          grep -q 'JQ_REPO_PATHS=Jebel-Quant/rhiza=.*/nested/somewhere/rhiza$' env.out
+          test "$(grep -c 'Jebel-Quant/actions=' env.out)" = 0

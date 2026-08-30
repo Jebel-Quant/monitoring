@@ -17,10 +17,14 @@ the previous scan otherwise. The template pointer is deliberately outside that:
 drift is the one thing that changes while the clone stands still, because it is
 the upstream that moved.
 
-Nothing here searches for checkouts either. Each monitored repo is expected at
-``<repo_root>/<owner>/<name>``, which is exactly where the generated compose
-override mounts it. The fleet is decided by ``repos.yml``, not by whatever
-happened to be lying around under a scanned directory.
+Nothing here searches for checkouts either. A repo is read at the path
+``JQ_REPO_PATHS`` gives for it, or failing that at ``<repo_root>/<owner>/<name>``
+- which is exactly where the generated compose override mounts it, so inside the
+container the default is always right. Outside it, paths are whatever they are on
+disk: ``repos.yml`` may well say ``~/repos/tschm/rhiza_projects/cs`` for
+``tschm/cs``, and no amount of joining owner to name will produce that. Either
+way the fleet is decided by ``repos.yml``, not by whatever happened to be lying
+around under a scanned directory.
 """
 
 from __future__ import annotations
@@ -354,20 +358,29 @@ def scan(
     """
     prior = previous or {}
     found: dict[str, LocalRepo] = {}
-    if not cfg.repo_root:
-        # Deliberate: with no repo root there are no working copies to report
-        # on, and an empty result is the honest answer rather than an error
-        # every minute.
-        return found
-    if not os.path.isdir(cfg.repo_root):
-        log.error("repo root %s is not a directory", cfg.repo_root)
+
+    # A configured root that does not exist is worth one error, not one per
+    # repo per minute. Explicit paths are unaffected by it, so this only
+    # withdraws the fallback rather than abandoning the whole scan.
+    root = cfg.repo_root
+    if root and not os.path.isdir(root):
+        log.error("repo root %s is not a directory", root)
+        root = ""
+    if not root and not cfg.repo_paths:
+        # Deliberate: nothing points at a working copy, so there are none to
+        # report on, and an empty result is the honest answer rather than an
+        # error every minute.
         return found
 
     for key in cfg.repos:
         if "/" not in key or key in skip:
             continue
         owner, repo_name = key.split("/", 1)
-        path = os.path.join(cfg.repo_root, owner, repo_name)
+        path = cfg.repo_paths.get(key)
+        if path is None:
+            if not root:
+                continue
+            path = os.path.join(root, owner, repo_name)
         # `.git` is a directory in a plain checkout and a file in a worktree.
         if not os.path.exists(os.path.join(path, ".git")):
             # Not mounted, or mounted somewhere else. Normal for a repo you

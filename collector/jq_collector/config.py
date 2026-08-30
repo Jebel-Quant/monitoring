@@ -20,6 +20,25 @@ def _csv(name: str, default: tuple[str, ...] = ()) -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
+def _pairs(name: str) -> dict[str, str]:
+    """``owner/name=path`` pairs, comma separated, into a mapping.
+
+    Raises rather than skipping a malformed entry. A dropped pair would take
+    one repo's working-copy panels off the board and say nothing about why,
+    which is the failure mode this whole module is shaped to avoid; refusing to
+    start is louder and cheaper to diagnose. A path containing a comma cannot
+    be expressed here - ``scripts/gen-repos.py`` refuses to emit one.
+    """
+    mapping: dict[str, str] = {}
+    for item in _csv(name):
+        key, separator, value = item.partition("=")
+        key, value = key.strip(), value.strip()
+        if not separator or not key or not value:
+            raise ValueError(f"{name}: expected owner/name=path, got {item!r}")
+        mapping[key] = os.path.expanduser(value)
+    return mapping
+
+
 @dataclass(frozen=True)
 class Config:
     """Everything the collector needs to know about its environment.
@@ -43,11 +62,20 @@ class Config:
     token: str = os.environ.get("GITHUB_TOKEN", "")
     api: str = os.environ.get("GITHUB_API", "https://api.github.com")
 
-    # Where the checkouts are mounted (read-only) inside the container, one per
-    # repo at <repo_root>/<owner>/<name>. Set empty to skip local scanning
-    # entirely, which is the right setting anywhere there are no working copies
-    # to report on - the local panels then simply have nothing to say.
+    # Where the checkouts are, for repos JQ_REPO_PATHS does not name: one per
+    # repo at <repo_root>/<owner>/<name>. That is exactly where the generated
+    # compose override bind-mounts them, so in the container this is all that
+    # is needed. Set empty to skip local scanning entirely, which is the right
+    # setting anywhere there are no working copies to report on - the local
+    # panels then simply have nothing to say.
     repo_root: str = os.environ.get("JQ_REPO_ROOT", "/repos")
+
+    # Explicit path per repo, as owner/name=path. Needed whenever a checkout
+    # does not sit at <repo_root>/<owner>/<name> - which is normal outside the
+    # container, where paths are whatever they are on disk rather than whatever
+    # a bind mount normalised them to. `scripts/gen-repos.py --env` emits this
+    # from repos.yml, so the layout is stated once and in one place.
+    repo_paths: dict[str, str] = field(default_factory=lambda: _pairs("JQ_REPO_PATHS"))
 
     # owner/name of the repo whose releases define "up to date".
     template_repo: str = os.environ.get("JQ_TEMPLATE_REPO", "Jebel-Quant/rhiza")

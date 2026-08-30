@@ -6,6 +6,42 @@ keywords: grafana login, no data, prometheus staleness, macos sleep, caffeinate
 
 # Running it day to day
 
+## The collector runs on your machine
+
+Two halves, not three containers. Prometheus and Grafana are in Docker;
+**the collector is an ordinary process on your Mac**, started by `up.sh` as a
+launchd agent and stopped by `down.sh`.
+
+It is not containerised because it reads your working copies, and a container
+can only reach those through bind mounts. Those mounts have to place every
+checkout at `<root>/<owner>/<name>`, which silently loses any repo that lives
+somewhere else, and reading thousands of small files back through them on macOS
+is slow enough that the line counts needed a cache to stay affordable. On the
+host both problems disappear.
+
+| | |
+|---|---|
+| Its log | `.collector-logs/collector.log` |
+| Restart it | `launchctl kickstart -k gui/$UID/com.jebel-quant.jq-collector` |
+| Run it in the foreground instead | `./scripts/collector.sh` (Ctrl-C stops it) |
+| Is Prometheus reaching it? | <http://localhost:9090/targets> — the `jq-collector` job |
+
+Prometheus scrapes it at `host.docker.internal:9109`, which is how a container
+reaches the machine it runs on.
+
+**The trade.** Inside the container the collector could only see the checkouts
+mounted into it, so an unlisted repo was not merely filtered out — it was
+invisible. It now runs as you and could read anything you can. It still never
+writes: every git call is read-only and passes `--no-optional-locks`. But that
+is now a property of the code rather than something the sandbox enforces.
+
+**If it will not start**, the usual cause is `PATH`. A launchd agent inherits
+`/usr/bin:/bin:/usr/sbin:/sbin` and nothing else, so a `uv` under
+`/opt/homebrew` or `~/.local` is invisible to it. `up.sh` pins `uv`'s directory
+into the plist when it installs the agent, so re-running `./scripts/up.sh`
+after moving or reinstalling `uv` is the fix.
+
+
 ## The "Sign in" button
 
 Grafana's own local login, against a SQLite file in the `grafana-data` volume on
