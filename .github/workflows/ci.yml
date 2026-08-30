@@ -53,7 +53,24 @@ jobs:
         run: uvx ruff format --check jq_collector tests
 
       - name: Tests
-        run: uv run --with pytest --with prometheus-client --with httpx --with pyyaml python -m pytest
+        run: |
+          uv run --with pytest --with pytest-cov --with prometheus-client --with httpx \
+            --with pyyaml python -m pytest \
+            --cov=jq_collector --cov-report=term-missing --cov-report=xml:_tests/coverage.xml
+
+      # The board reads coverage from this artifact, for this repo as for every
+      # other one it watches - see docs/dashboard.md#size-and-cadence. The name
+      # is load-bearing: the collector looks for `coverage-report` and nothing
+      # else. So is the path being repo-relative rather than collector-relative,
+      # because defaults.run.working-directory applies to `run` steps only and
+      # this is a `uses` step - getting that wrong uploads an empty artifact and
+      # the column silently reads "no report".
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: collector/_tests/coverage.xml
+          if-no-files-found: error
 
   dashboards:
     name: dashboards
