@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 """Turn repos.yml into the compose override that mounts the fleet.
 
-The collector never searches for checkouts. It expects each repo at
-/repos/<owner>/<name>, so this script resolves every listed path, asks its
-origin remote who it is, and writes one read-only bind mount per repo plus the
-matching JQ_REPOS list. Both halves of the collector then read the same list,
-and the board's contents are decided by repos.yml alone.
+The collector never searches for checkouts. This script resolves every listed
+path, asks its origin remote who it is, and writes one read-only bind mount per
+repo at /repos/<owner>/<name> plus the matching JQ_REPOS list. Both halves of
+the collector then read the same list, and the board's contents are decided by
+repos.yml alone.
 
 Run it after editing repos.yml; scripts/up.sh does that for you.
 
-With ``--env`` it writes nothing and prints the ``JQ_REPOS=`` line instead. A
-server has no checkouts, so it names its fleet in .env by hand - and a list
-retyped by hand is a list that drifts from the one here. Generate it on a
-machine that has the checkouts and paste the one line over:
+With ``--env`` it writes nothing and prints the environment instead - JQ_REPOS,
+and JQ_REPO_PATHS naming where each checkout really is:
 
     python3 scripts/gen-repos.py --env
+
+That second line is what makes a collector running outside the container agree
+with repos.yml. In the container the bind mounts normalise every checkout onto
+/repos/<owner>/<name>, so the path is implied; on the host it is not, because a
+repos.yml entry like ~/repos/tschm/rhiza_projects/cs for tschm/cs cannot be
+recovered by joining owner to name. Without the paths those repos silently
+vanish from the working-copy panels while staying on the GitHub ones.
 """
 
 from __future__ import annotations
@@ -124,9 +129,20 @@ def main() -> None:
             fail(f"{full_name} is listed twice")
         resolved[full_name] = path
 
-    # Nothing but the line itself on stdout, so it can be piped or appended.
+    # Nothing but the lines themselves on stdout, so they can be piped or
+    # appended to a .env.
     if env_only:
         print(f'JQ_REPOS={",".join(resolved)}')
+        paths = {name: path for name, path in resolved.items() if path is not None}
+        # A comma is the separator, so a path containing one cannot be
+        # expressed. Refuse rather than emit a line the collector would reject
+        # or, worse, silently misread as two repos.
+        for name, path in paths.items():
+            if "," in str(path):
+                fail(f"{name}: path contains a comma, which JQ_REPO_PATHS cannot express: {path}")
+        if paths:
+            joined = ",".join(f"{name}={path}" for name, path in paths.items())
+            print(f"JQ_REPO_PATHS={joined}")
         return
 
     lines = [

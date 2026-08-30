@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import dataclasses
 import importlib.util
+import os
 import pathlib
 import subprocess
 import sys
@@ -46,10 +47,15 @@ def make_checkout(
     return path
 
 
-def config(repos: tuple[str, ...], repo_root: pathlib.Path) -> Config:
+def config(
+    repos: tuple[str, ...],
+    repo_root: pathlib.Path | str,
+    repo_paths: dict[str, str] | None = None,
+) -> Config:
     cfg = Config()
     object.__setattr__(cfg, "repos", repos)
     object.__setattr__(cfg, "repo_root", str(repo_root))
+    object.__setattr__(cfg, "repo_paths", repo_paths or {})
     return cfg
 
 
@@ -103,6 +109,96 @@ def test_the_checkout_is_read_at_the_canonical_path(tmp_path):
 
     assert found["cvxgrp/cvxsimulator"].path == str(path)
     assert found["cvxgrp/cvxsimulator"].branch == "main"
+
+
+# -- where a checkout actually is --------------------------------------------
+
+
+def test_a_checkout_outside_the_canonical_layout_is_read(tmp_path):
+    """<root>/<owner>/<name> is a default, not a rule.
+
+    The bind mounts normalise every checkout onto that shape inside the
+    container, so the default is always right there. On the host it is not:
+    ~/repos/tschm/rhiza_projects/cs is a checkout of tschm/cs, and no amount of
+    joining owner to name will produce that path. Four repos in the real fleet
+    are laid out this way, and they silently vanished from the working-copy
+    panels while staying on the GitHub ones.
+    """
+    path = make_checkout(tmp_path / "nested" / "elsewhere", "tschm", "cs")
+    cfg = config(("tschm/cs",), tmp_path, {"tschm/cs": str(path)})
+
+    found = localgit.scan(cfg, {})
+
+    assert set(found) == {"tschm/cs"}
+    assert found["tschm/cs"].path == str(path)
+
+
+def test_an_explicit_path_wins_over_the_canonical_one(tmp_path):
+    canonical = make_checkout(tmp_path, "tschm", "cs")
+    elsewhere = make_checkout(tmp_path / "other", "tschm", "cs")
+    cfg = config(("tschm/cs",), tmp_path, {"tschm/cs": str(elsewhere)})
+
+    found = localgit.scan(cfg, {})
+
+    assert found["tschm/cs"].path == str(elsewhere)
+    assert found["tschm/cs"].path != str(canonical)
+
+
+def test_repos_without_an_explicit_path_still_fall_back_to_the_root(tmp_path):
+    """The container relies on this: mounts, no JQ_REPO_PATHS at all."""
+    make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    nested = make_checkout(tmp_path / "nested", "tschm", "cs")
+    cfg = config(("Jebel-Quant/rhiza", "tschm/cs"), tmp_path, {"tschm/cs": str(nested)})
+
+    found = localgit.scan(cfg, {})
+
+    assert set(found) == {"Jebel-Quant/rhiza", "tschm/cs"}
+
+
+def test_an_explicit_path_to_the_wrong_repo_is_still_refused(tmp_path, caplog):
+    """The origin check matters more now, not less - the path is arbitrary."""
+    path = make_checkout(
+        tmp_path / "nested", "tschm", "cs", origin="git@github.com:cvxgrp/cvxpy.git"
+    )
+    cfg = config(("tschm/cs",), tmp_path, {"tschm/cs": str(path)})
+
+    assert localgit.scan(cfg, {}) == {}
+    assert "check repos.yml" in caplog.text
+
+
+def test_explicit_paths_work_with_no_repo_root_at_all(tmp_path):
+    """Running outside the container there is no /repos to fall back to."""
+    path = make_checkout(tmp_path / "nested", "tschm", "cs")
+    cfg = config(("tschm/cs",), "", {"tschm/cs": str(path)})
+
+    assert set(localgit.scan(cfg, {})) == {"tschm/cs"}
+
+
+def test_nothing_local_configured_is_a_quiet_no_op(tmp_path):
+    assert localgit.scan(config(("tschm/cs",), "", {}), {}) == {}
+
+
+def test_a_missing_root_does_not_abandon_the_explicit_paths(tmp_path, caplog):
+    """One error for the bad root, and the repos that do not need it still work."""
+    path = make_checkout(tmp_path / "nested", "tschm", "cs")
+    cfg = config(("tschm/cs",), tmp_path / "does-not-exist", {"tschm/cs": str(path)})
+
+    assert set(localgit.scan(cfg, {})) == {"tschm/cs"}
+    assert "is not a directory" in caplog.text
+
+
+def test_malformed_repo_paths_refuse_to_start(monkeypatch):
+    """A dropped pair would take one repo off the board and say nothing."""
+    monkeypatch.setenv("JQ_REPO_PATHS", "tschm/cs")
+    with pytest.raises(ValueError, match="owner/name=path"):
+        Config()
+
+
+def test_repo_paths_are_parsed_and_expanded(monkeypatch):
+    monkeypatch.setenv("JQ_REPO_PATHS", "tschm/cs=~/repos/tschm/rhiza_projects/cs, a/b=/tmp/b")
+    paths = Config().repo_paths
+    assert paths["a/b"] == "/tmp/b"
+    assert paths["tschm/cs"] == os.path.expanduser("~/repos/tschm/rhiza_projects/cs")
 
 
 # -- measurements and the activity cache -------------------------------------
@@ -340,12 +436,17 @@ def test_a_directory_that_is_not_a_checkout_fails(gen_repos, tmp_path):
         gen_repos.resolve({"path": str(tmp_path / "empty")}, 1)
 
 
-def test_env_mode_prints_the_list_and_writes_nothing(gen_repos, tmp_path, monkeypatch, capsys):
-    """A server names its fleet in .env, and that line must come from repos.yml.
+def test_env_mode_prints_the_fleet_and_the_paths_and_writes_nothing(
+    gen_repos, tmp_path, monkeypatch, capsys
+):
+    """Both lines must come from repos.yml, not from anyone's memory.
 
-    Retyping it is how the two drift: a repo added here never reaches the board
-    and nothing reports the difference. --env must also leave the compose
-    override alone, so it is safe to run on a machine that has no stack.
+    Retyping either is how they drift: a repo added here never reaches the
+    board and nothing reports the difference. The paths line is what lets a
+    collector running outside the container find a checkout that does not sit
+    at <root>/<owner>/<name> - and a repo with no checkout must not appear in
+    it at all. --env must also leave the compose override alone, so it is safe
+    to run on a machine that has no stack.
     """
     path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
     source = tmp_path / "repos.yml"
@@ -357,8 +458,26 @@ def test_env_mode_prints_the_list_and_writes_nothing(gen_repos, tmp_path, monkey
 
     gen_repos.main()
 
-    assert capsys.readouterr().out.strip() == "JQ_REPOS=Jebel-Quant/rhiza,cvxgrp/cvxsimulator"
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert lines == [
+        "JQ_REPOS=Jebel-Quant/rhiza,cvxgrp/cvxsimulator",
+        f"JQ_REPO_PATHS=Jebel-Quant/rhiza={path}",
+    ]
     assert not target.exists()
+
+
+def test_env_mode_refuses_a_path_it_cannot_express(gen_repos, tmp_path, monkeypatch, capsys):
+    """A comma is the separator, so a path holding one would read as two repos."""
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhi,za")
+    source = tmp_path / "repos.yml"
+    source.write_text(f"repos:\n  - path: {path}\n")
+    monkeypatch.setattr(gen_repos, "SOURCE", source)
+    monkeypatch.setattr(gen_repos, "TARGET", tmp_path / "out.yml")
+    monkeypatch.setattr(sys, "argv", ["gen-repos.py", "--env"])
+
+    with pytest.raises(SystemExit):
+        gen_repos.main()
+    assert "contains a comma" in capsys.readouterr().err
 
 
 def test_an_unknown_flag_is_refused(gen_repos, monkeypatch):
