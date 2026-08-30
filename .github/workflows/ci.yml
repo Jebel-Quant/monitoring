@@ -6,10 +6,28 @@
 # code - it passed on all three.
 name: CI
 
+# Skipped when a change touches only prose. Splitting the README into docs/
+# means most doc edits are pure markdown, and running the collector tests,
+# compose parsing and dashboard checks over them says nothing - it only makes
+# the PR slower and trains people to ignore the checks. A mixed pull request
+# still runs everything: paths-ignore skips the workflow only when *every*
+# changed file matches.
+#
+# Note main is currently unprotected. If required status checks are ever turned
+# on, a workflow skipped this way never reports and the merge button blocks
+# forever - the fix then is a same-named no-op job, not removing the filter.
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'mkdocs.yml'
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'mkdocs.yml'
 
 permissions:
   contents: read

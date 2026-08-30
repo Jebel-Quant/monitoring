@@ -11,10 +11,27 @@
 # managed and has none of those, so it builds the site directly.
 name: Book
 
+# The mirror image of ci.yml's filter: this runs only when something the book
+# is actually built from changed. The workflow file itself is listed, so a
+# change to these steps is still exercised by the pull request that makes it.
+#
+# `**.md` is deliberately broad - it catches collector/README.md and the root
+# README, neither of which is in the site, but a false positive here costs one
+# cheap build while a false negative ships a broken link.
 on:
   pull_request:
+    paths:
+      - '**.md'
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/book.yml'
   push:
     branches: [main]
+    paths:
+      - '**.md'
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/book.yml'
 
 permissions:
   contents: read
