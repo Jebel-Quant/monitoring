@@ -161,10 +161,8 @@ def test_protection_details_are_exported_when_known():
 
 
 def test_disabled_dependabot_is_not_reported_as_zero_alerts():
-    """"No alerts" and "nobody is looking" must not render as the same tile."""
-    lines = expose(
-        Snapshot(remote={"o/r": RemoteRepo(name="r", owner="o", alerts_enabled=False)})
-    )
+    """ "No alerts" and "nobody is looking" must not render as the same tile."""
+    lines = expose(Snapshot(remote={"o/r": RemoteRepo(name="r", owner="o", alerts_enabled=False)}))
     assert 'jq_dependabot_alerts_enabled{repo="o/r"} 0.0' in lines
     assert not [ln for ln in lines if ln.startswith("jq_dependabot_open_alerts")]
 
@@ -174,9 +172,7 @@ def test_open_alerts_zero_fill_the_known_severities():
     lines = expose(
         Snapshot(
             remote={
-                "o/r": RemoteRepo(
-                    name="r", owner="o", alerts_enabled=True, alerts=(("high", 3),)
-                )
+                "o/r": RemoteRepo(name="r", owner="o", alerts_enabled=True, alerts=(("high", 3),))
             }
         )
     )

@@ -165,9 +165,7 @@ class GitHub:
         A repo with alerts disabled 404s exactly like one with none open, so
         None and {} are kept distinct all the way to the exposition.
         """
-        raw = self._json(
-            f"/repos/{full_name}/dependabot/alerts", state="open", per_page=100
-        )
+        raw = self._json(f"/repos/{full_name}/dependabot/alerts", state="open", per_page=100)
         if not isinstance(raw, list):
             return None
         counts: dict[str, int] = {}
