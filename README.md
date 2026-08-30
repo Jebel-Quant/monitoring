@@ -386,6 +386,26 @@ chmod 600 .env
 A `.env` rather than `export`, so the settings survive a reboot - compose reads
 it automatically, and it is gitignored.
 
+**Do not retype that `JQ_REPOS` line.** A fleet transcribed by hand is a fleet
+that quietly diverges from the one in `repos.yml` - a repo added on the laptop
+never reaches the board, and nothing reports the difference. Generate it on a
+machine that has the checkouts and copy the single line across:
+
+```bash
+python3 scripts/gen-repos.py --env
+# JQ_REPOS=Jebel-Quant/monitoring,cvxgrp/cvxrisk,tschm/pyhrp
+```
+
+`--env` writes nothing and prints only that line, so it pipes:
+
+```bash
+python3 scripts/gen-repos.py --env | ssh fleet-host 'cat >> monitoring/.env'
+```
+
+Re-run it after editing `repos.yml` and replace the line on the server. The
+server keeps naming its fleet in `.env` rather than reading `repos.yml`, because
+every path in that file describes a machine the server is not.
+
 Note the token has to be able to read every repo named in `JQ_REPOS`. A
 fine-grained token scoped to one org cannot see another's, and the collector
 logs `listed repo ... is not readable` when that happens — one unreadable entry
