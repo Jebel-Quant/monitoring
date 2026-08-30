@@ -57,6 +57,21 @@ class RemoteRepo:
     head_sha: str = ""
     pushed_at: float = 0.0
 
+    # Default-branch protection. None means "GitHub would not tell us" - the
+    # protection endpoint needs admin on the repo, and a token without it gets
+    # the same 404 as a genuinely unprotected branch. Reporting that as
+    # "unprotected" would invent a finding; the dashboard shows it as unknown.
+    protected: bool | None = None
+    required_reviews: int = 0
+    allows_force_push: bool = False
+
+    # Open Dependabot alerts by severity. `alerts_enabled` is False when the
+    # feature is off for the repo, which GitHub reports as a 404 - the same
+    # status as "no alerts". Kept apart because "0 open alerts" and "nobody is
+    # looking" are opposite facts and must not render as the same green tile.
+    alerts_enabled: bool = False
+    alerts: tuple[tuple[str, int], ...] = ()
+
     rhiza_managed: bool = False
     rhiza_ref: str = ""
     # None when the pinned ref is not a published release (a branch or a sha),
