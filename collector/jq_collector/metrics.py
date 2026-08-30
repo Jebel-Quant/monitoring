@@ -266,6 +266,36 @@ def render(snap: Snapshot):
         ["repo"],
     )
 
+    # -- size and cadence -------------------------------------------------
+    # Lines are counted in the working copy, commits on the default branch.
+    # Re-measured only when the clone moves, so these are flat between commits
+    # by design rather than by a stuck collector.
+    code_lines = _gauge(
+        "jq_local_code_lines",
+        "Lines of tracked source outside the test tree, in the working copy.",
+        ["repo"],
+    )
+    test_lines = _gauge(
+        "jq_local_test_lines",
+        "Lines of tracked source under the test tree, in the working copy.",
+        ["repo"],
+    )
+    commits_30d = _gauge(
+        "jq_local_commits_30d",
+        "Commits on the default branch in the last 30 days.",
+        ["repo"],
+    )
+    since_release = _gauge(
+        "jq_local_commits_since_release",
+        "Commits on the default branch since the newest tag. Absent when the clone has no tags.",
+        ["repo"],
+    )
+    release_info = _gauge(
+        "jq_local_last_release_info",
+        "Always 1; the label carries the newest tag reachable in the clone.",
+        ["repo", "ref"],
+    )
+
     for key in keys:
         remote = snap.remote.get(key)
         local = snap.local.get(key)
@@ -381,6 +411,16 @@ def render(snap: Snapshot):
             if local.default_branch_sha and remote and remote.head_sha:
                 synced.add_metric(ident, 1 if local.default_branch_sha == remote.head_sha else 0)
 
+            code_lines.add_metric(ident, local.code_lines)
+            test_lines.add_metric(ident, local.test_lines)
+            commits_30d.add_metric(ident, local.commits_30d)
+            # Absent, not zero, when the repo has never been tagged. Zero here
+            # would read as "nothing unreleased", the opposite of the truth.
+            if local.commits_since_release is not None:
+                since_release.add_metric(ident, local.commits_since_release)
+            if local.last_release:
+                release_info.add_metric([*ident, local.last_release], 1)
+
     yield from (
         repo_info,
         cloned,
@@ -417,6 +457,11 @@ def render(snap: Snapshot):
         fetch_age,
         local_ref,
         synced,
+        code_lines,
+        test_lines,
+        commits_30d,
+        since_release,
+        release_info,
     )
 
 

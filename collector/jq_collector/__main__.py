@@ -28,7 +28,12 @@ log = logging.getLogger("jq_collector")
 def _refresh_local(cfg: Config, store: Store) -> None:
     snap = store.snapshot()
     branches = {name: repo.default_branch for name, repo in snap.remote.items()}
-    store.update(local=localgit.scan(cfg, branches, skip=snap.excluded))
+    # The previous scan is the measurement cache: a repo that has not moved
+    # since it keeps its line and commit counts instead of paying for them
+    # again, every minute, forever.
+    store.update(
+        local=localgit.scan(cfg, branches, skip=snap.excluded, previous=snap.local),
+    )
 
 
 def _refresh_github(cfg: Config, store: Store) -> None:

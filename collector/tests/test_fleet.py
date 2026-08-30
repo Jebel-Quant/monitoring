@@ -12,6 +12,7 @@ refused rather than reported under the listed repo's name.
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import pathlib
 import subprocess
@@ -102,6 +103,150 @@ def test_the_checkout_is_read_at_the_canonical_path(tmp_path):
 
     assert found["cvxgrp/cvxsimulator"].path == str(path)
     assert found["cvxgrp/cvxsimulator"].branch == "main"
+
+
+# -- measurements and the activity cache -------------------------------------
+
+
+def commit(path: pathlib.Path, rel: str, body: str, message: str = "c") -> None:
+    target = path / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body)
+    subprocess.run(["git", "-C", str(path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(path), "commit", "-qm", message], check=True)
+
+
+def test_lines_are_split_into_code_and_tests(tmp_path):
+    """Both fleet conventions count as tests: a tests/ tree, and a test_ prefix."""
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    commit(path, "src/thing.py", "a\nb\nc\n")
+    commit(path, "tests/test_thing.py", "d\ne\n")
+    commit(path, "src/test_inline.py", "f\n")
+    # Neither of these is code: one is prose, one is configuration.
+    commit(path, "README.md", "x\n" * 99)
+    commit(path, "pyproject.toml", "y\n" * 99)
+
+    found = localgit.scan(config(("Jebel-Quant/rhiza",), tmp_path), {})
+
+    assert found["Jebel-Quant/rhiza"].code_lines == 3
+    assert found["Jebel-Quant/rhiza"].test_lines == 3
+
+
+def test_a_repo_with_no_tags_reports_no_release_rather_than_zero(tmp_path):
+    """Zero unreleased commits means "all shipped"; never tagged is the opposite."""
+    make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+
+    found = localgit.scan(config(("Jebel-Quant/rhiza",), tmp_path), {})
+
+    assert found["Jebel-Quant/rhiza"].commits_since_release is None
+    assert found["Jebel-Quant/rhiza"].last_release == ""
+
+
+def test_commits_are_counted_from_the_newest_tag(tmp_path):
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    subprocess.run(["git", "-C", str(path), "tag", "v1.0.0"], check=True)
+    commit(path, "src/a.py", "a\n")
+    commit(path, "src/b.py", "b\n")
+
+    found = localgit.scan(config(("Jebel-Quant/rhiza",), tmp_path), {})
+
+    assert found["Jebel-Quant/rhiza"].last_release == "v1.0.0"
+    assert found["Jebel-Quant/rhiza"].commits_since_release == 2
+    assert found["Jebel-Quant/rhiza"].commits_30d == 3
+
+
+def test_a_quiet_repo_is_not_measured_again(tmp_path, monkeypatch):
+    """The whole point of the fingerprint: no activity, no work.
+
+    Proved by making measurement itself fail. A cached pass must not notice,
+    an uncached one must - anything weaker only shows the numbers came out the
+    same, which they would even if every file had been read again.
+    """
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    commit(path, "src/a.py", "a\n")
+    cfg = config(("Jebel-Quant/rhiza",), tmp_path)
+    first = localgit.scan(cfg, {})
+
+    def explode(*_args):
+        raise AssertionError("measured a repo that had not moved")
+
+    monkeypatch.setattr(localgit, "_line_counts", explode)
+    monkeypatch.setattr(localgit, "_commit_counts", explode)
+
+    second = localgit.scan(cfg, {}, previous=first)
+    assert second["Jebel-Quant/rhiza"].code_lines == 1
+
+    with pytest.raises(AssertionError, match="had not moved"):
+        localgit.scan(cfg, {})
+
+
+def test_a_new_commit_invalidates_the_cache(tmp_path):
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    commit(path, "src/a.py", "a\n")
+    cfg = config(("Jebel-Quant/rhiza",), tmp_path)
+    first = localgit.scan(cfg, {})
+
+    unchanged = localgit.scan(cfg, {}, previous=first)
+    assert unchanged["Jebel-Quant/rhiza"].measured_at == first["Jebel-Quant/rhiza"].measured_at
+
+    commit(path, "src/b.py", "b\nc\n")
+    after = localgit.scan(cfg, {}, previous=unchanged)
+    assert after["Jebel-Quant/rhiza"].measured_at != first["Jebel-Quant/rhiza"].measured_at
+    assert after["Jebel-Quant/rhiza"].code_lines == 3
+
+
+def test_tagging_the_current_commit_invalidates_the_cache(tmp_path):
+    """A release moves neither HEAD nor the tree, and must still be noticed."""
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    commit(path, "src/a.py", "a\n")
+    cfg = config(("Jebel-Quant/rhiza",), tmp_path)
+    first = localgit.scan(cfg, {})
+    assert first["Jebel-Quant/rhiza"].commits_since_release is None
+
+    subprocess.run(["git", "-C", str(path), "tag", "v1.0.0"], check=True)
+
+    after = localgit.scan(cfg, {}, previous=first)
+    assert after["Jebel-Quant/rhiza"].last_release == "v1.0.0"
+    assert after["Jebel-Quant/rhiza"].commits_since_release == 0
+
+
+def test_template_drift_is_re_read_even_when_the_measurements_are_cached(tmp_path):
+    """Drift is the one thing that changes while the clone stands still.
+
+    The upstream publishes a release, or someone edits the pointer in place;
+    neither moves HEAD. Caching the measurements must not freeze the pointer
+    along with them, or the board would go on reporting the old ref.
+    """
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    pointer = path / ".rhiza" / "template.yml"
+    pointer.parent.mkdir()
+    pointer.write_text("ref: v1.0.0\n")
+    commit(path, "src/a.py", "a\n")
+    cfg = config(("Jebel-Quant/rhiza",), tmp_path)
+
+    first = localgit.scan(cfg, {})
+    assert first["Jebel-Quant/rhiza"].rhiza_ref == "v1.0.0"
+
+    # Edited in place and left uncommitted: HEAD does not move, so the
+    # measurements are entitled to be cached. The ref is not.
+    pointer.write_text("ref: v2.0.0\n")
+
+    second = localgit.scan(cfg, {}, previous=first)
+    assert second["Jebel-Quant/rhiza"].rhiza_ref == "v2.0.0"
+
+
+def test_a_measurement_older_than_the_cap_is_retaken(tmp_path):
+    """The 30-day window slides even when nobody commits."""
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    commit(path, "src/a.py", "a\n")
+    cfg = config(("Jebel-Quant/rhiza",), tmp_path)
+    first = localgit.scan(cfg, {})
+
+    row = first["Jebel-Quant/rhiza"]
+    aged = dataclasses.replace(row, measured_at=row.measured_at - cfg.measure_max_age - 1)
+
+    after = localgit.scan(cfg, {}, previous={"Jebel-Quant/rhiza": aged})
+    assert after["Jebel-Quant/rhiza"].measured_at > aged.measured_at
 
 
 # -- the GitHub half ---------------------------------------------------------

@@ -88,6 +88,7 @@ better a refusal than a board that is quietly one repo short.
 | `JQ_INCLUDE_ARCHIVED` | `false` | Archived repos are dropped from both halves. |
 | `JQ_PUBLIC_ONLY` | `false` | Drop private repos entirely — not just their details, their existence. |
 | `JQ_GITHUB_INTERVAL` | `300` | Seconds between GitHub refreshes. |
+| `JQ_MEASURE_MAX_AGE` | `86400` | Seconds an unchanged line/commit count may stand before it is retaken. See [Size and cadence](dashboard.md#size-and-cadence). |
 | `PROM_RETENTION` | `180d` | How much history to keep. |
 
 On the server stack there are no checkouts and so no `repos.yml`: the fleet is
