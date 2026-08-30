@@ -1,5 +1,11 @@
 # Fleet monitoring
 
+[![CI](https://img.shields.io/github/actions/workflow/status/Jebel-Quant/monitoring/ci.yml?branch=main&label=CI)](https://github.com/Jebel-Quant/monitoring/actions/workflows/ci.yml)
+[![Book](https://img.shields.io/github/actions/workflow/status/Jebel-Quant/monitoring/book.yml?branch=main&label=book)](https://github.com/Jebel-Quant/monitoring/actions/workflows/book.yml)
+[![Docs](https://img.shields.io/badge/docs-jebel--quant.github.io-blue)](https://jebel-quant.github.io/monitoring/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](collector/pyproject.toml)
+[![License](https://img.shields.io/github/license/Jebel-Quant/monitoring)](LICENSE)
+
 A Grafana board for the state of your repo fleet — template drift, CI on the
 default branch, open pull requests, and the working copies on this machine —
 with Prometheus keeping the history and six alert rules on top.
