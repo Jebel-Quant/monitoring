@@ -15,8 +15,10 @@ the board because you listed it in `repos.yml`, and for no other reason.
 
 ## What you need
 
-Docker, and the [`gh` CLI](https://cli.github.com) signed in (`up.sh` mints the
-token from it — otherwise put a `GITHUB_TOKEN` in `.env` yourself).
+Docker (for Prometheus and Grafana), [`uv`](https://docs.astral.sh/uv/) (for the
+collector, which runs on your machine rather than in a container), and the
+[`gh` CLI](https://cli.github.com) signed in — `up.sh` mints the token from it,
+otherwise put a `GITHUB_TOKEN` in `.env` yourself.
 
 ## Recipe
 
@@ -34,7 +36,9 @@ repos:
   - repo: Jebel-Quant/actions           # monitored, but not cloned here
 ```
 
-`owner/name` comes from each checkout's `origin`, so the path is all you write.
+`owner/name` comes from each checkout's `origin`, so the path is all you write,
+and the path is used as written — a checkout does not have to live at
+`<root>/<owner>/<name>`.
 Then:
 
 ```bash
@@ -43,8 +47,9 @@ open http://localhost:3000/d/jq-fleet
 ```
 
 The board fills in within a minute — the local panels first, the GitHub panels
-after the first API refresh. Both `repos.yml` and the generated
-`docker-compose.repos.yml` are gitignored: they describe one machine's folders.
+after the first API refresh. `repos.yml` is gitignored: it describes one machine's folders. Nothing is
+generated from it — the collector reads it at every launch, so there is no
+second file to fall out of step.
 
 ## Then what
 
@@ -53,6 +58,7 @@ after the first API refresh. Both `repos.yml` and the generated
 | Add or drop a repo | edit `repos.yml`, `./scripts/up.sh` again — [details](docs/configuration.md) |
 | Erase a dropped repo's history | [`./scripts/purge-repo.sh owner/name`](docs/configuration.md#dropping-a-repo) (irreversible) |
 | Stop | `./scripts/down.sh` (add `--volumes` to discard the history too) |
+| See the collector's log | `tail -f .collector-logs/collector.log` — it runs on your machine, not in Docker ([why](docs/operations.md#the-collector-runs-on-your-machine)) |
 | Edit the board | change `grafana/dashboards/fleet.json`; it reloads in 30s — [read the traps first](docs/dashboard.md#traps-worth-not-re-introducing) |
 | Get notified | add a contact point under *Alerting → Contact points* — [why it is not provisioned](docs/dashboard.md#alerting) |
 

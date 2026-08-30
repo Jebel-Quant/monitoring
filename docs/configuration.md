@@ -87,27 +87,23 @@ better a refusal than a board that is quietly one repo short.
 | `JQ_IGNORE` | — | Repos to drop without editing `repos.yml`, as bare names or `owner/name`. Applies to both halves. |
 | `JQ_INCLUDE_ARCHIVED` | `false` | Archived repos are dropped from both halves. |
 | `JQ_PUBLIC_ONLY` | `false` | Drop private repos entirely — not just their details, their existence. |
-| `JQ_REPO_PATHS` | — | Where each checkout really is, as `owner/name=path` pairs. Only needed outside the container — see [Checkout paths](#checkout-paths). |
+| `JQ_REPO_PATHS` | — | Where each checkout really is, as `owner/name=path` pairs. `scripts/collector.sh` sets it from `repos.yml` — see [Checkout paths](#checkout-paths). |
 | `JQ_GITHUB_INTERVAL` | `300` | Seconds between GitHub refreshes. |
 | `JQ_MEASURE_MAX_AGE` | `86400` | Seconds an unchanged line/commit count may stand before it is retaken. See [Size and cadence](dashboard.md#size-and-cadence). |
 | `PROM_RETENTION` | `180d` | How much history to keep. |
 
-`scripts/gen-repos.py` turns `repos.yml` into the `JQ_REPOS` list the
-collector actually reads, so both halves see the same fleet. Setting `JQ_REPOS`
-by hand works too, and skips `repos.yml` entirely — but then nothing mounts the
-checkouts, so only the GitHub panels have anything to say.
+`scripts/gen-repos.py` turns `repos.yml` into the `JQ_REPOS` list the collector
+actually reads, so both halves see the same fleet. Setting `JQ_REPOS` by hand
+works too and skips `repos.yml` entirely — but then no checkout paths are set
+either, so only the GitHub panels have anything to say.
 
 ## Checkout paths
 
 The collector reads a repo at the path `JQ_REPO_PATHS` gives for it, and failing
 that at `<JQ_REPO_ROOT>/<owner>/<name>`.
 
-**In the container only the fallback is used, and it is always right**, because
-the generated bind mounts put every checkout at exactly that path. `repos.yml`
-can say anything and the mount normalises it.
-
-**Outside the container it is often wrong**, because paths are whatever they are
-on disk. An entry like
+The collector runs on your machine, so paths are whatever they are on disk and
+the fallback is often wrong. An entry like
 
 ```yaml
   - path: ~/repos/tschm/rhiza_projects/cs     # this is tschm/cs
@@ -118,11 +114,13 @@ working-copy panels while staying on the GitHub ones — present on the board, a
 quietly missing half its columns. Four repos in the fleet this was built against
 are laid out that way.
 
-So when you run the collector on the host, take both lines from `repos.yml`
-rather than writing them out:
+You do not normally set this yourself: `scripts/collector.sh` runs
+`scripts/gen-repos.py` at every launch and exports both lines, so `repos.yml`
+stays the only place the fleet and the layout are written down. To see what it
+resolves to:
 
 ```bash
-uv run --with pyyaml python scripts/gen-repos.py --env >> .env
+uv run --with pyyaml python scripts/gen-repos.py
 ```
 
 A path containing a comma cannot be expressed — comma is the separator — and

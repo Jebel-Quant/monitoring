@@ -107,6 +107,14 @@ name to `owner/name` when the cvxgrp repos were added, so history from before
 that point lives under the old names. Windows spanning the change show both
 generations; they age out. This is inherent to Prometheus, not a misconfiguration.
 
+**The `instance` label is pinned on purpose.** There is one collector, so
+`instance` says only where the process happened to be running — and left alone
+it is the scrape address. When the collector moved out of its container the
+address changed, every series forked in two, and for one stale window each repo
+appeared on the board twice. `prometheus.yml` relabels it to a constant so that
+cannot recur; series from before the move keep the old value and age out with
+retention.
+
 **Never `group_left` onto an `_info` metric without a `topk` guard.** The
 `_info` metrics carry a label that changes value — `ref`, `branch`,
 `conclusion`, `checks`. When one changes, Prometheus returns the old *and* the
