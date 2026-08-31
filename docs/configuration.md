@@ -43,6 +43,41 @@ dead repo on the board — that gap kept `rhiza-brainbug` showing as the fleet's
 one red repo for a while after it was archived. Set `JQ_INCLUDE_ARCHIVED=true`
 to opt back in.
 
+## GitHub and GitLab in the same fleet
+
+An entry is read through GitHub unless it says otherwise:
+
+```yaml
+repos:
+  - path: ~/repos/jebel-quant/rhiza      # github.com, from the origin remote
+  - path: ~/repos/acme/web               # gitlab.com, from the origin remote
+  - repo: acme/platform/infra/web        # no checkout, so it has to say
+    forge: gitlab
+```
+
+Where an entry has a `path`, the forge is inferred from the origin remote's
+host — `gitlab.com`, or any `gitlab.*` hostname, is GitLab; everything else is
+GitHub. Where it has only a `repo:`, there is no origin to look at, so anything
+but GitHub must carry `forge: gitlab`. A forge nobody implements is refused at
+startup rather than quietly read as GitHub, which would leave the repo on the
+board with every remote panel empty and nothing saying why.
+
+**GitLab namespaces nest, and the whole path is the name.** The project `web` in
+the subgroup `acme/platform/infra` is `acme/platform/infra/web`, not
+`infra/web` — and that whole path is what appears in the `repo` label and in
+every dashboard row.
+
+**The same `namespace/name` on both forges is refused.** One `repo` label is one
+repo, and the board's entire label scheme rests on that; a merged pair would
+report one repo's CI under the other's name while still looking like a working
+board. Rename one entry with an explicit `repo:` if you genuinely have both.
+
+Only gitlab.com is supported. Self-hosted GitLab would need the API base URL per
+entry rather than one `GITLAB_API`, and that is not built.
+
+**One panel group cannot be filled for GitLab repos** — see
+[the Dependabot note](metrics.md#dependabot-has-no-gitlab-counterpart).
+
 ## Dropping a repo
 
 Dropping a repo stops new samples but leaves its **history**, so it still
@@ -92,7 +127,10 @@ Passed as `-e NAME=value` on the `docker run`, or in `.env` if you use
 
 | Variable | Default | |
 |---|---|---|
-| `GITHUB_TOKEN` | — | Must be able to read every repo in `repos.yml`. `gh auth token` prints a usable one. |
+| `GITHUB_TOKEN` | — | Must be able to read every GitHub repo in `repos.yml`. `gh auth token` prints a usable one. |
+| `GITLAB_TOKEN` | — | Only needed if `repos.yml` lists a `forge: gitlab` entry. Public projects are readable without one; private ones need `read_api`. |
+| `GITLAB_API` | `https://gitlab.com/api/v4` | Only gitlab.com is supported. |
+| `JQ_REPO_FORGES` | — | Which forge each repo is read through, as `owner/name=forge` pairs. Filled from `repos.yml`; set it for a deployment with no file to mount. |
 | `JQ_TEMPLATE_REPO` | `Jebel-Quant/rhiza` | Whose releases define "up to date", as `owner/name`. |
 | `JQ_IGNORE` | — | Repos to drop without editing `repos.yml`, as bare names or `owner/name`. Applies to both halves. |
 | `JQ_INCLUDE_ARCHIVED` | `false` | Archived repos are dropped from both halves. |
@@ -100,7 +138,7 @@ Passed as `-e NAME=value` on the `docker run`, or in `.env` if you use
 | `JQ_REPO_PATHS` | — | Where each checkout really is, as `owner/name=path` pairs. Filled from `repos.yml`; set it to override one entry — see [Checkout paths](#checkout-paths). |
 | `JQ_HOST_ROOT` | `/host` | Where your home directory is mounted, and therefore what `~` in `repos.yml` means. |
 | `JQ_PROM_ADMIN_API` | `false` | Enables the API [`purge-repo`](#dropping-a-repo) needs. Leave it off. |
-| `JQ_GITHUB_INTERVAL` | `300` | Seconds between GitHub refreshes. |
+| `JQ_GITHUB_INTERVAL` | `300` | Seconds between remote refreshes. Both forges are collected in one pass, so this paces both. |
 | `JQ_MEASURE_MAX_AGE` | `86400` | Seconds an unchanged line/commit count may stand before it is retaken. See [Size and cadence](dashboard.md#size-and-cadence). |
 | `PROM_RETENTION` | `180d` | How much history to keep. |
 

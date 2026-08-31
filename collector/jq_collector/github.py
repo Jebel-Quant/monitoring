@@ -28,19 +28,15 @@ from xml.etree import ElementTree
 import httpx
 
 from .config import Config
+from .forge import GOOD_CONCLUSIONS, INCONCLUSIVE_CONCLUSIONS
 from .state import MergedPull, PullRequest, RemoteRepo, WorkflowRun
 
 log = logging.getLogger(__name__)
 
-# Conclusions that mean the workflow did its job. Kept here as well as in
-# metrics.py because the representative-run choice depends on it.
-GOOD_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
-
-# Conclusions that are no verdict at all. A run cancelled by hand, or by a
-# concurrency group when a newer push superseded it, says nothing about the
-# branch - and `stale` means it never really ran. Treating either as red made a
-# repo failing for the sole reason that somebody stopped a job.
-INCONCLUSIVE_CONCLUSIONS = frozenset({"cancelled", "stale"})
+# Both re-exported. They used to be defined here and again in metrics.py, and a
+# second forge would have made three copies of one contract. They live in
+# forge.py now, next to the table that translates GitLab's spelling into them.
+__all__ = ["GOOD_CONCLUSIONS", "INCONCLUSIVE_CONCLUSIONS", "GitHub", "collect"]
 
 _ACCEPT = "application/vnd.github+json"
 _MAX_WORKERS = 8
@@ -145,17 +141,21 @@ class GitHub:
 
     # -- fleet-level -----------------------------------------------------
 
-    def list_repos(self) -> list[dict]:
+    def list_repos(self, fleet: tuple[str, ...] | None = None) -> list[dict]:
         """The repos named in the config, in the order they were listed.
 
         One call each, and no org sweep: the fleet is whatever you wrote down.
         A repo that cannot be read is dropped with a warning rather than
         failing the refresh, so one bad line does not blank the whole board.
+
+        ``fleet`` narrows that list to this forge's share. Without it every
+        GitLab repo in a mixed fleet would be asked of GitHub, which answers 404
+        and logs each one as unreadable.
         """
         repos: list[dict] = []
         seen: set[str] = set()
 
-        for full_name in self._cfg.repos:
+        for full_name in fleet if fleet is not None else self._cfg.repos:
             if "/" not in full_name or full_name in seen:
                 continue
             raw = self._json(f"/repos/{full_name}")
@@ -516,8 +516,17 @@ def collect(
     cfg: Config,
     ref_cache: dict[str, tuple[str, str]],
     coverage_cache: dict[str, tuple[int, tuple[float, int] | None]] | None = None,
-) -> tuple[dict[str, RemoteRepo], GitHub, str, frozenset[str]]:
-    """Build the remote half of the snapshot, keyed by ``owner/name``.
+    fleet: tuple[str, ...] | None = None,
+) -> tuple[dict[str, RemoteRepo], GitHub, list[str], frozenset[str]]:
+    """Build the GitHub part of the snapshot, keyed by ``owner/name``.
+
+    Returns the template repo's release tags along with the repos, because the
+    GitLab collector needs the same list to measure its own repos' drift: the
+    template lives on GitHub wherever the repo pinning it lives, so fetching the
+    tags once here and passing them on keeps it to one call per refresh.
+
+    ``fleet`` is this forge's share of the repos. It defaults to the whole
+    fleet, which is right for a GitHub-only deployment and for every test.
 
     The template pointer is always read from GitHub's default branch, never from
     the local clone. Drift is a property of the *repo*, and a clone can be
@@ -539,7 +548,6 @@ def collect(
     coverage_cache = coverage_cache or {}
     api = GitHub(cfg)
     tags = api.release_tags(cfg.template_repo)
-    latest = tags[0] if tags else ""
 
     # Dropped repos are reported back so the local scan can skip their clones
     # too - otherwise a checkout keeps a dead repo on the board after the GitHub
@@ -549,7 +557,7 @@ def collect(
     # honoured only by the scan, via Config.wants(), so ignoring a repo silently
     # removed its working-copy rows while leaving every CI, drift and
     # pull-request series in place.
-    listing = api.list_repos()
+    listing = api.list_repos(fleet)
     excluded = frozenset(
         r["full_name"]
         for r in listing
@@ -618,6 +626,9 @@ def collect(
         return RemoteRepo(
             name=raw["name"],
             owner=owner,
+            forge="github",
+            url=raw.get("html_url") or "",
+            pulls_url=f"{raw['html_url']}/pulls" if raw.get("html_url") else "",
             default_branch=branch,
             visibility=raw.get("visibility") or "unknown",
             archived=bool(raw.get("archived")),
@@ -656,4 +667,4 @@ def collect(
             except Exception as exc:  # noqa: BLE001 - one bad repo must not sink the refresh
                 log.warning("repo %s failed: %s", full_name, exc)
 
-    return result, api, latest, excluded
+    return result, api, tags, excluded

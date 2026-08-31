@@ -20,6 +20,7 @@ import subprocess
 import pytest
 
 from jq_collector import localgit, repos
+from jq_collector import origin as origin_module
 from jq_collector.config import Config
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -389,10 +390,13 @@ def write_fleet(tmp_path: pathlib.Path, body: str) -> str:
 def test_a_checkout_is_named_by_its_origin(tmp_path):
     path = make_checkout(tmp_path, "cvxgrp", "cvxsimulator")
 
-    fleet, paths = repos.load(write_fleet(tmp_path, f"  - path: {path}\n"))
+    fleet, paths, forges = repos.load(write_fleet(tmp_path, f"  - path: {path}\n"))
 
     assert fleet == ("cvxgrp/cvxsimulator",)
     assert paths == {"cvxgrp/cvxsimulator": str(path)}
+    # make_checkout gives the clone a github.com origin, so the forge follows
+    # from the host without the entry having to say.
+    assert forges == {"cvxgrp/cvxsimulator": "github"}
 
 
 def test_an_explicit_repo_overrides_the_origin(tmp_path):
@@ -403,14 +407,17 @@ def test_an_explicit_repo_overrides_the_origin(tmp_path):
     assert repos.load(write_fleet(tmp_path, body)) == (
         ("cvxpy/cvxpy",),
         {"cvxpy/cvxpy": str(path)},
+        {"cvxpy/cvxpy": "github"},
     )
 
 
 def test_an_entry_may_name_a_repo_with_no_checkout(tmp_path):
-    fleet, paths = repos.load(write_fleet(tmp_path, "  - repo: Jebel-Quant/actions\n"))
+    fleet, paths, forges = repos.load(write_fleet(tmp_path, "  - repo: Jebel-Quant/actions\n"))
 
     assert fleet == ("Jebel-Quant/actions",)
     assert paths == {}
+    # No checkout means no origin to infer from, so it falls to the default.
+    assert forges == {"Jebel-Quant/actions": "github"}
 
 
 def test_a_bare_string_entry_is_a_path(tmp_path):
@@ -429,7 +436,7 @@ def test_a_named_repo_whose_checkout_is_missing_keeps_its_github_panels(tmp_path
     body = "  - path: ~/nowhere/rhiza\n    repo: Jebel-Quant/rhiza\n"
 
     with caplog.at_level("WARNING"):
-        fleet, paths = repos.load(write_fleet(tmp_path, body))
+        fleet, paths, _forges = repos.load(write_fleet(tmp_path, body))
 
     assert fleet == ("Jebel-Quant/rhiza",)
     assert paths == {}
@@ -601,9 +608,109 @@ def test_an_origin_that_names_no_owner_is_refused(tmp_path, origin):
 def test_git_being_unrunnable_is_refused_not_guessed_at(tmp_path, monkeypatch):
     """Same answer as a missing remote: the collector will not invent a name."""
     path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    # The git call lives in `origin` now, which is what both repos.py and
+    # localgit.py read a remote through.
     monkeypatch.setattr(
-        repos.subprocess, "run", lambda *_a, **_k: (_ for _ in ()).throw(OSError("no git"))
+        origin_module.subprocess, "run", lambda *_a, **_k: (_ for _ in ()).throw(OSError("no git"))
     )
 
     with pytest.raises(repos.FleetError, match="origin"):
         repos.load(write_fleet(tmp_path, f"  - path: {path}\n"))
+
+
+# -- which forge each entry belongs to ---------------------------------------
+#
+# The forge is what decides which API a repo is read through, so getting it
+# wrong is not a crash but a repo on the board with every remote panel blank.
+# It is inferred from the origin host where there is a checkout, and stated
+# outright where there is not.
+
+
+def test_the_forge_is_inferred_from_a_checkouts_origin_host(tmp_path):
+    """Free, because the origin URL is parsed for the repo's name anyway."""
+    path = make_checkout(tmp_path, "acme", "web", origin="git@gitlab.com:acme/web.git")
+
+    _fleet, _paths, forges = repos.load(write_fleet(tmp_path, f"  - path: {path}\n"))
+
+    assert forges == {"acme/web": "gitlab"}
+
+
+def test_a_gitlab_subgroup_keeps_its_whole_namespace(tmp_path):
+    """The old parser kept the last two segments, which named a project that
+    does not exist and an API path that 404s."""
+    path = make_checkout(
+        tmp_path, "x", "y", origin="https://gitlab.com/acme/platform/infra/web.git"
+    )
+
+    fleet, paths, forges = repos.load(write_fleet(tmp_path, f"  - path: {path}\n"))
+
+    assert fleet == ("acme/platform/infra/web",)
+    assert paths == {"acme/platform/infra/web": str(path)}
+    assert forges == {"acme/platform/infra/web": "gitlab"}
+
+
+def test_an_explicit_forge_wins_over_the_origin(tmp_path):
+    """For a checkout whose origin is a mirror on the other forge."""
+    path = make_checkout(tmp_path, "acme", "web", origin="git@github.com:acme/web.git")
+    body = f"  - path: {path}\n    forge: gitlab\n"
+
+    _fleet, _paths, forges = repos.load(write_fleet(tmp_path, body))
+
+    assert forges == {"acme/web": "gitlab"}
+
+
+def test_an_entry_with_no_checkout_states_its_forge(tmp_path):
+    """No origin to infer from, so anything but the default has to say."""
+    body = "  - repo: acme/platform/infra/web\n    forge: gitlab\n"
+
+    fleet, paths, forges = repos.load(write_fleet(tmp_path, body))
+
+    assert fleet == ("acme/platform/infra/web",)
+    assert paths == {}
+    assert forges == {"acme/platform/infra/web": "gitlab"}
+
+
+def test_an_explicit_repo_still_takes_its_forge_from_the_origin(tmp_path):
+    """`repo:` overrides the name - that is what it is for, on a fork - but the
+    origin's host is still the best evidence of where the repo lives."""
+    path = make_checkout(tmp_path, "me", "web", origin="git@gitlab.com:me/web.git")
+    body = f"  - path: {path}\n    repo: acme/web\n"
+
+    _fleet, _paths, forges = repos.load(write_fleet(tmp_path, body))
+
+    assert forges == {"acme/web": "gitlab"}
+
+
+@pytest.mark.parametrize("declared", ["gitbucket", "GitHub Enterprise", "gitea"])
+def test_a_forge_nobody_implements_is_refused(tmp_path, declared):
+    """Reading an unknown name as GitHub would put the repo on the board with
+    every remote panel wrong and nothing saying why."""
+    body = f"  - repo: acme/web\n    forge: {declared}\n"
+
+    with pytest.raises(repos.FleetError, match="forge"):
+        repos.load(write_fleet(tmp_path, body))
+
+
+@pytest.mark.parametrize("declared", ["gitlab", "GitLab", "  GITLAB  "])
+def test_a_declared_forge_is_case_and_space_insensitive(tmp_path, declared):
+    body = f"  - repo: acme/web\n    forge: '{declared}'\n"
+
+    assert repos.load(write_fleet(tmp_path, body))[2] == {"acme/web": "gitlab"}
+
+
+def test_the_same_path_on_two_forges_is_refused(tmp_path):
+    """One `repo` label is one repo, and the board's whole label scheme rests on
+    that. A merged pair would report one repo's CI under the other's name and
+    read as a working board while doing it."""
+    body = "  - repo: acme/web\n  - repo: acme/web\n    forge: gitlab\n"
+
+    with pytest.raises(repos.FleetError, match="on github and on gitlab"):
+        repos.load(write_fleet(tmp_path, body))
+
+
+def test_the_duplicate_message_stays_plain_when_the_forge_matches(tmp_path):
+    """Naming a forge here would suggest the forge was the problem."""
+    body = "  - repo: acme/web\n  - repo: acme/web\n"
+
+    with pytest.raises(repos.FleetError, match="acme/web is listed twice$"):
+        repos.load(write_fleet(tmp_path, body))

@@ -22,39 +22,17 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
 from typing import Any
 
+from . import origin
+
 log = logging.getLogger(__name__)
+
+KNOWN_FORGES = (origin.GITHUB, origin.GITLAB)
 
 
 class FleetError(Exception):
     """``repos.yml`` says something the collector cannot act on."""
-
-
-def _origin_owner_name(path: str) -> tuple[str, str] | None:
-    """The ``(owner, name)`` a checkout's origin points at."""
-    try:
-        url = subprocess.run(
-            ["git", "--no-optional-locks", "-C", path, "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            timeout=20,
-            check=False,
-        ).stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if not url:
-        return None
-    url = url.removesuffix(".git")
-    if url.startswith("git@"):
-        tail = url.partition(":")[2]
-    elif "://" in url:
-        tail = url.split("://", 1)[1].split("/", 1)[-1]
-    else:
-        tail = url
-    parts = [p for p in tail.split("/") if p]
-    return (parts[-2], parts[-1]) if len(parts) >= 2 else None
 
 
 def resolve_path(raw: str, host_root: str) -> str:
@@ -88,8 +66,25 @@ def _is_checkout(path: str) -> bool:
     return os.path.exists(os.path.join(path, ".git"))
 
 
-def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None]:
-    """One entry -> ``(owner/name, checkout path or None)``."""
+def _declared_forge(item: dict, index: int) -> str | None:
+    """The entry's explicit ``forge:``, validated, or None if it has none.
+
+    An unknown value is refused rather than defaulted. Silently reading
+    ``forge: gitbucket`` as GitHub would put a repo on the board with every
+    remote panel wrong and nothing saying why.
+    """
+    declared = str(item.get("forge") or "").strip().lower()
+    if not declared:
+        return None
+    if declared not in KNOWN_FORGES:
+        raise FleetError(
+            f"entry {index}: forge {declared!r} is not one of {', '.join(KNOWN_FORGES)}"
+        )
+    return declared
+
+
+def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None, str]:
+    """One entry -> ``(namespace/name, checkout path or None, forge)``."""
     # `- ~/repos/foo` is accepted as shorthand for `- path: ~/repos/foo`.
     if isinstance(item, str):
         item = {"path": item}
@@ -98,6 +93,7 @@ def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None]:
 
     named = str(item.get("repo") or "").strip()
     raw_path = item.get("path")
+    declared = _declared_forge(item, index)
 
     if raw_path is None:
         # Name the offending value, not just the rule. "entry 7" in a
@@ -108,7 +104,9 @@ def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None]:
             )
         if "/" not in named:
             raise FleetError(f"entry {index}: repo {named!r} is not of the form owner/name")
-        return named, None
+        # No checkout means no origin to infer from, so an entry on any forge
+        # but the default has to say so itself.
+        return named, None, declared or origin.GITHUB
 
     path = resolve_path(str(raw_path), host_root)
 
@@ -118,30 +116,37 @@ def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None]:
         # and only the working-copy panels go quiet - but say so once, because
         # a typo in repos.yml looks exactly like this from here.
         if named and "/" in named:
-            log.warning("no checkout for %s at %s - GitHub panels only", named, path)
-            return named, None
+            log.warning("no checkout for %s at %s - remote panels only", named, path)
+            return named, None, declared or origin.GITHUB
         raise FleetError(
             f"entry {index}: {raw_path} is not a git checkout (looked in {path}). "
             "Mount the home directory it lives under, or give the entry a "
             "`repo: owner/name` so it can be monitored without one."
         )
 
-    if "/" in named:
-        return named, path
+    parsed = origin.read(path)
 
-    origin = _origin_owner_name(path)
-    if origin is None:
+    if "/" in named:
+        # An explicit `repo:` overrides the origin - that is what it is for, on
+        # a fork - but the origin's host is still the best evidence of which
+        # forge the repo lives on when the entry did not say.
+        return named, path, declared or (parsed.forge if parsed else origin.GITHUB)
+
+    if parsed is None:
         raise FleetError(
             f"entry {index}: {path} has no usable origin remote - add an explicit `repo: owner/name`"
         )
-    return f"{origin[0]}/{origin[1]}", path
+    return parsed.full_name, path, declared or parsed.forge
 
 
-def load(source: str, host_root: str = "") -> tuple[tuple[str, ...], dict[str, str]]:
-    """Read ``repos.yml`` into ``(fleet, checkout paths)``.
+def load(
+    source: str, host_root: str = ""
+) -> tuple[tuple[str, ...], dict[str, str], dict[str, str]]:
+    """Read ``repos.yml`` into ``(fleet, checkout paths, forge per repo)``.
 
-    The fleet is every listed repo as ``owner/name``; the paths map holds only
-    those with a checkout this machine can actually read.
+    The fleet is every listed repo as ``namespace/name``; the paths map holds
+    only those with a checkout this machine can actually read; the forge map
+    says which API each one is read through.
     """
     import yaml
 
@@ -162,12 +167,21 @@ def load(source: str, host_root: str = "") -> tuple[tuple[str, ...], dict[str, s
 
     fleet: list[str] = []
     paths: dict[str, str] = {}
+    forges: dict[str, str] = {}
     for index, item in enumerate(entries, start=1):
-        full_name, path = _entry(item, index, host_root)
+        full_name, path, forge = _entry(item, index, host_root)
         if full_name in fleet:
-            raise FleetError(f"{full_name} is listed twice")
+            # Two forges can host the same `namespace/name`, and the board's
+            # whole label scheme is that one `repo` value is one repo. Refusing
+            # is the same choice the duplicate case has always made: a merged
+            # pair would report one repo's CI under the other's name, and read
+            # as a working board while doing it.
+            clash = forges[full_name]
+            detail = f" - on {clash} and on {forge}" if clash != forge else ""
+            raise FleetError(f"{full_name} is listed twice{detail}")
         fleet.append(full_name)
+        forges[full_name] = forge
         if path is not None:
             paths[full_name] = path
 
-    return tuple(fleet), paths
+    return tuple(fleet), paths, forges

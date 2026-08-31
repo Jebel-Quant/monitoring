@@ -5,27 +5,36 @@ rather than mutating long-lived gauges. That matters because the label sets here
 churn - a merged PR, a deleted repo, a branch that goes away - and a registry of
 persistent gauges would keep exporting those series forever.
 
-The ``repo`` label is the full ``owner/name``. A bare name is only unique
-within one owner, and the dashboard joins frames on this label and builds GitHub
-links out of it - both of which need it to be unique on its own. ``owner`` is
-carried on ``jq_repo_info`` alone, purely so the dashboard can offer it as a
-filter, rather than as a duplicate column on every joined table.
+The ``repo`` label is the full ``namespace/name`` - which on GitLab can be more
+than two segments deep, since namespaces nest. A bare name is only unique within
+one owner, and the dashboard joins frames on this label, so it has to be unique
+on its own. ``owner`` is carried on ``jq_repo_info`` alone, purely so the
+dashboard can offer it as a filter, rather than as a duplicate column on every
+joined table.
+
+The forge is carried the same way, on ``jq_repo_info`` and nowhere else. That is
+deliberate: adding a label to a metric family starts a new series and orphans
+the old one, and the thirty families keyed on ``repo`` alone are the history
+behind every trend panel and alert rule. Putting the forge on the identity
+metric - already an ``Always 1`` join target whose label set churns anyway -
+means a fleet that predates GitLab support keeps all of it.
+
+For the same reason the ``url`` labels carry what the API actually returned
+rather than something the dashboard rebuilds: a per-forge URL cannot be built by
+pasting the repo label onto a fixed prefix, and never had to be.
+
+The repo-level one is ``repo_url`` rather than ``url`` so that a panel can pull
+it in with ``group_left`` alongside a pull request's or a run's own ``url``
+without the two colliding - which is exactly what the drill-down tables do.
 """
 
 from __future__ import annotations
 
 from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
 
+from .forge import GOOD_CONCLUSIONS as _GOOD_CONCLUSIONS
+from .forge import INCONCLUSIVE_CONCLUSIONS as _INCONCLUSIVE_CONCLUSIONS
 from .state import Snapshot
-
-# Conclusions that mean "this pipeline did its job".
-_GOOD_CONCLUSIONS = {"success", "neutral", "skipped"}
-
-# Conclusions that are no verdict at all - a cancelled or superseded run. They
-# are neither green nor red, so they are left out of the exposition entirely,
-# the same way a workflow that never ran is. github.py already drops them when
-# it picks each workflow's latest run; this layer owns the exposition contract.
-_INCONCLUSIVE_CONCLUSIONS = {"cancelled", "stale"}
 
 
 def _gauge(name: str, doc: str, labels: list[str] | None = None) -> GaugeMetricFamily:
@@ -51,10 +60,10 @@ def render(snap: Snapshot):
         "Refreshes that raised, per source.",
         labels=["source"],
     )
-    for source in ("github", "local"):
-        health = snap.health.get(source)
-        if health is None:
-            continue
+    # Whatever actually reported, rather than a fixed list: the set of sources
+    # is now the set of forges in the fleet plus `local`, so a hardcoded tuple
+    # would silently drop gitlab's health.
+    for source, health in sorted(snap.health.items()):
         last_success.add_metric([source], health.last_success)
         duration.add_metric([source], health.last_duration)
         errors.add_metric([source], health.errors)
@@ -91,7 +100,7 @@ def render(snap: Snapshot):
     repo_info = _gauge(
         "jq_repo_info",
         "Always 1; labels carry the repo's identity for joining.",
-        ["repo", "owner", "default_branch", "visibility"],
+        ["repo", "owner", "default_branch", "visibility", "forge", "repo_url", "pulls_url"],
     )
     cloned = _gauge(
         "jq_repo_cloned",
@@ -156,7 +165,7 @@ def render(snap: Snapshot):
     ci_info = _gauge(
         "jq_ci_last_run_info",
         "Always 1; labels carry the last completed default-branch run.",
-        ["repo", "conclusion", "workflow"],
+        ["repo", "conclusion", "workflow", "url"],
     )
     ci_ok = _gauge(
         "jq_ci_last_run_success",
@@ -178,6 +187,14 @@ def render(snap: Snapshot):
         "jq_ci_workflow_timestamp_seconds",
         "Per workflow: when that run finished.",
         ["repo", "workflow"],
+    )
+    # Its own family rather than a label on jq_ci_workflow_success, which is a
+    # real gauge with 180 days behind it - adding a label there would start a
+    # new series and orphan all of it.
+    wf_info = _gauge(
+        "jq_ci_workflow_info",
+        "Always 1; the label carries the URL of that workflow's latest run.",
+        ["repo", "workflow", "url"],
     )
     coverage = _gauge(
         "jq_ci_coverage_percent",
@@ -212,12 +229,21 @@ def render(snap: Snapshot):
     pr_info = _gauge(
         "jq_pull_request_info",
         "Always 1; one series per open pull request.",
-        ["repo", "number", "title", "author", "checks", "draft"],
+        ["repo", "number", "title", "author", "checks", "draft", "url"],
     )
     merged_at = _gauge(
         "jq_merged_pull_request_timestamp_seconds",
         "Unix time a pull request was merged. topk() over this gives the newest.",
         ["repo", "number", "title", "author"],
+    )
+    # The URL rides on its own family rather than on the timestamp above,
+    # because that timestamp *is* the merged-PR timeline - the history the
+    # "Recently merged" panel reads. A label there would have orphaned every
+    # existing series and, until they went stale, shown each merged PR twice.
+    merged_info = _gauge(
+        "jq_merged_pull_request_info",
+        "Always 1; the label carries the merged pull request's URL.",
+        ["repo", "number", "url"],
     )
     pr_created = _gauge(
         "jq_pull_request_created_timestamp_seconds",
@@ -311,12 +337,23 @@ def render(snap: Snapshot):
     for key in keys:
         remote = snap.remote.get(key)
         local = snap.local.get(key)
-        owner = key.partition("/")[0]
+        # rpartition, not partition: a GitLab namespace nests, so the owner is
+        # everything before the last slash rather than the first segment.
+        owner = key.rpartition("/")[0]
         ident = [key]
 
         default_branch = remote.default_branch if remote else "main"
         repo_info.add_metric(
-            [key, owner, default_branch, remote.visibility if remote else "unknown"], 1
+            [
+                key,
+                owner,
+                default_branch,
+                remote.visibility if remote else "unknown",
+                remote.forge if remote else "github",
+                remote.url if remote else "",
+                remote.pulls_url if remote else "",
+            ],
+            1,
         )
         cloned.add_metric(ident, 1 if local else 0)
 
@@ -362,9 +399,12 @@ def render(snap: Snapshot):
                 bad += 0 if good else 1
                 wf_ok.add_metric([*ident, wf.name], 1 if good else 0)
                 wf_at.add_metric([*ident, wf.name], wf.finished_at)
+                wf_info.add_metric([*ident, wf.name, wf.url], 1)
 
             if remote.ci_conclusion and remote.ci_conclusion not in _INCONCLUSIVE_CONCLUSIONS:
-                ci_info.add_metric([*ident, remote.ci_conclusion, remote.ci_workflow], 1)
+                ci_info.add_metric(
+                    [*ident, remote.ci_conclusion, remote.ci_workflow, remote.ci_url], 1
+                )
                 # Green only when no workflow is red. Deriving this from a single
                 # run made a repo look green whenever some other workflow had run
                 # more recently than the failing one.
@@ -396,6 +436,7 @@ def render(snap: Snapshot):
                         pull.author,
                         pull.checks,
                         str(pull.draft).lower(),
+                        pull.url,
                     ],
                     1,
                 )
@@ -411,6 +452,7 @@ def render(snap: Snapshot):
                     continue
                 seen.add(m.number)
                 merged_at.add_metric([*ident, str(m.number), m.title, m.author], m.merged_at)
+                merged_info.add_metric([*ident, str(m.number), m.url], 1)
 
         if local is not None:
             local_branch.add_metric([*ident, local.branch or "unknown"], 1)
@@ -458,6 +500,7 @@ def render(snap: Snapshot):
         ci_dur,
         wf_ok,
         wf_at,
+        wf_info,
         wf_failing,
         coverage,
         coverage_lines,
@@ -467,6 +510,7 @@ def render(snap: Snapshot):
         pr_info,
         pr_created,
         merged_at,
+        merged_info,
         local_branch,
         on_default,
         dirty,

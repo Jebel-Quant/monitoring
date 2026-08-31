@@ -22,6 +22,14 @@ if [[ -z "${GITHUB_TOKEN:-}" ]]; then
   say "no GITHUB_TOKEN - GitHub allows 60 unauthenticated calls an hour, which
        is not enough for a fleet. Pass -e GITHUB_TOKEN=\"\$(gh auth token)\"."
 fi
+# Only if the fleet actually has a GitLab repo in it. A GitHub-only board must
+# not start warning about credentials it has no use for, so this greps the file
+# rather than just testing the variable.
+if [[ -z "${GITLAB_TOKEN:-}" ]] \
+  && grep -qE '^[[:space:]]*forge:[[:space:]]*.?gitlab' "${JQ_REPOS_FILE:-/config/repos.yml}"; then
+  say "repos.yml lists a GitLab repo but no GITLAB_TOKEN is set - only public
+       projects will be readable. Pass -e GITLAB_TOKEN=\"...\"."
+fi
 # Not fatal: a board with no working copies mounted is a supported way to run
 # this. Saying so once beats a user wondering why half the panels are empty.
 if [[ ! -d "${JQ_HOST_ROOT:-/host}" ]]; then

@@ -6,7 +6,8 @@ import logging
 import os
 from dataclasses import dataclass, field
 
-from .repos import FleetError, load
+from .origin import GITHUB
+from .repos import KNOWN_FORGES, FleetError, load
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +46,25 @@ def _pairs(name: str) -> dict[str, str]:
     return mapping
 
 
+def _forges(name: str) -> dict[str, str]:
+    """``owner/name=forge`` pairs, comma separated, into a mapping.
+
+    Raises on an unknown forge for the same reason `repos._declared_forge`
+    does: reading a name nobody implements as GitHub would put the repo on the
+    board with every remote panel wrong and nothing saying why.
+    """
+    mapping: dict[str, str] = {}
+    for item in _csv(name):
+        key, separator, value = item.partition("=")
+        key, value = key.strip(), value.strip().lower()
+        if not separator or not key or not value:
+            raise ValueError(f"{name}: expected owner/name=forge, got {item!r}")
+        if value not in KNOWN_FORGES:
+            raise ValueError(f"{name}: forge {value!r} is not one of {', '.join(KNOWN_FORGES)}")
+        mapping[key] = value
+    return mapping
+
+
 @dataclass(frozen=True)
 class Config:
     """Everything the collector needs to know about its environment.
@@ -71,6 +91,13 @@ class Config:
     token: str = os.environ.get("GITHUB_TOKEN", "")
     api: str = os.environ.get("GITHUB_API", "https://api.github.com")
 
+    # The second forge. Kept as its own pair rather than a per-forge mapping
+    # because gitlab.com is the only GitLab this supports: a fleet spanning a
+    # self-hosted instance as well would need the base URL per entry, and there
+    # is no point paying for that generality until somebody has one.
+    gitlab_token: str = os.environ.get("GITLAB_TOKEN", "")
+    gitlab_api: str = os.environ.get("GITLAB_API", "https://gitlab.com/api/v4")
+
     # The fleet file. Read when it is there; when it is not, JQ_REPOS and
     # JQ_REPO_PATHS are the whole story. /config/repos.yml is where the image
     # expects it to be mounted.
@@ -91,6 +118,11 @@ class Config:
     # Explicit path per repo, as owner/name=path. Filled from repos.yml, and
     # overridable from the environment for a deployment that has no file.
     repo_paths: dict[str, str] = field(default_factory=lambda: _pairs("JQ_REPO_PATHS"))
+
+    # Which forge each repo is read through, as owner/name=forge. Filled from
+    # repos.yml; anything unlisted is GitHub, which is what makes a fleet that
+    # predates GitLab support keep working untouched.
+    forges: dict[str, str] = field(default_factory=lambda: _forges("JQ_REPO_FORGES"))
 
     # owner/name of the repo whose releases define "up to date".
     template_repo: str = os.environ.get("JQ_TEMPLATE_REPO", "Jebel-Quant/rhiza")
@@ -148,14 +180,41 @@ class Config:
         if not self.repos_file or not os.path.isfile(self.repos_file):
             return
         try:
-            fleet, paths = load(self.repos_file, self.host_root)
+            fleet, paths, forges = load(self.repos_file, self.host_root)
         except FleetError as exc:
             raise SystemExit(f"repos.yml: {exc}") from exc
         object.__setattr__(self, "repos", fleet)
         # The environment wins: it is the narrower, more deliberate statement,
         # and it is how one path can be corrected without touching the file.
         object.__setattr__(self, "repo_paths", {**paths, **self.repo_paths})
+        object.__setattr__(self, "forges", {**forges, **self.forges})
         log.info("fleet: %d repos, %d with a checkout", len(fleet), len(self.repo_paths))
+        # A second line rather than a clause on the first, and only when there
+        # is a split worth reporting: a GitHub-only fleet logs exactly what it
+        # logged before GitLab support existed, which is what CI asserts on and
+        # what anybody reading these logs already recognises.
+        by_forge = self.repos_by_forge()
+        if len(by_forge) > 1:
+            log.info(
+                "forges: %s",
+                ", ".join(f"{len(names)} on {forge}" for forge, names in sorted(by_forge.items())),
+            )
 
     def is_ignored(self, owner: str, name: str) -> bool:
         return name in self.ignore or f"{owner}/{name}" in self.ignore
+
+    def forge_for(self, full_name: str) -> str:
+        """Which forge a repo is read through. Unlisted means GitHub."""
+        return self.forges.get(full_name, GITHUB)
+
+    def repos_by_forge(self) -> dict[str, tuple[str, ...]]:
+        """The fleet grouped by forge, so each API is asked once for its share.
+
+        Only forges that actually have repos appear, which is what keeps a
+        GitHub-only fleet from ever building a GitLab client or warning about a
+        token it has no use for.
+        """
+        grouped: dict[str, list[str]] = {}
+        for full_name in self.repos:
+            grouped.setdefault(self.forge_for(full_name), []).append(full_name)
+        return {forge: tuple(names) for forge, names in grouped.items()}

@@ -644,7 +644,7 @@ def test_one_failing_repo_does_not_sink_the_refresh(monkeypatch, caplog):
                 raise RuntimeError("this repo is cursed")
             return "sha"
 
-        def list_repos(self):
+        def list_repos(self, _fleet=None):
             return [
                 {
                     "full_name": f"o/{n}",

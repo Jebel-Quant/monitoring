@@ -29,3 +29,29 @@ repos:
   # for it. This is also the form to use for every entry if you would rather
   # not mount your home directory at all.
   # - repo: Jebel-Quant/actions
+
+  # A GitLab project. `forge: gitlab` is what sends it to GitLab's API instead
+  # of GitHub's; without it the entry is read as a GitHub repo and every remote
+  # panel comes back empty.
+  #
+  # It can be left off when the entry has a `path`, because then the checkout's
+  # origin host says which forge it is. Spelling it out costs nothing and is the
+  # only option for an entry with no checkout.
+  # - repo: acme/web
+  #   forge: gitlab
+
+  # GitLab namespaces nest, and the whole path is the project's name - not just
+  # the last two segments. This is the project `web` in `acme/platform/infra`.
+  # - repo: acme/platform/infra/web
+  #   forge: gitlab
+
+  # A GitLab checkout, where the forge follows from the origin remote's host.
+  # - path: ~/repos/acme/web
+
+  # Two notes on a mixed fleet:
+  #
+  # - Set GITLAB_TOKEN as well as GITHUB_TOKEN. Public projects are readable
+  #   without one, private ones are not.
+  # - The Dependabot tiles stay blank for GitLab repos. GitLab's equivalent is
+  #   an Ultimate-tier feature, so there is nothing to read; the board shows
+  #   them as unknown rather than as a green "no alerts".

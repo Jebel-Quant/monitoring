@@ -20,7 +20,11 @@ groups:
           fleet: jebel-quant
         annotations:
           summary: "{{ $labels.repo }} has been red on its default branch for over a day"
-          runbook: "https://github.com/{{ $labels.repo }}/actions"
+          # The dashboard drill-down, not a forge URL. These rules fire off
+          # metrics labelled with `repo` alone, so there is nothing here to join
+          # against for the repo's own forge and address - and the drill-down
+          # panel carries the real per-forge link anyway.
+          runbook: "/d/jq-fleet/jebel-quant-fleet?viewPanel=101"
         noDataState: OK
         execErrState: Error
         data:
@@ -86,7 +90,7 @@ groups:
           fleet: jebel-quant
         annotations:
           summary: "{{ $labels.repo }} has {{ $values.B }} open PR(s) with failing checks"
-          runbook: "https://github.com/{{ $labels.repo }}/pulls"
+          runbook: "/d/jq-fleet/jebel-quant-fleet?viewPanel=104"
         noDataState: OK
         execErrState: Error
         data:

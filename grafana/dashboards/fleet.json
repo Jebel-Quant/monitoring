@@ -19,6 +19,24 @@
   "templating": {
     "list": [
       {
+        "name": "forge",
+        "label": "Forge",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "jq-prometheus"
+        },
+        "query": "label_values(jq_repo_info, forge)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
         "name": "repo",
         "label": "Repo",
         "type": "query",
@@ -26,7 +44,7 @@
           "type": "prometheus",
           "uid": "jq-prometheus"
         },
-        "query": "label_values(jq_repo_info, repo)",
+        "query": "label_values(jq_repo_info{forge=~\"$forge\"}, repo)",
         "refresh": 2,
         "includeAll": true,
         "allValue": ".*",
@@ -1163,7 +1181,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "jq_ci_last_run_info{repo=~\"$repo\"}",
+          "expr": "jq_ci_last_run_info{repo=~\"$repo\"} * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
           "instant": true,
           "format": "table"
         },
@@ -1379,11 +1397,53 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "Open Actions on GitHub",
-                    "url": "https://github.com/${__value.text}/actions",
+                    "title": "Open the repo on its forge",
+                    "url": "${__data.fields.repo_url}",
                     "targetBlank": true
                   }
                 ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Workflow"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "${__data.fields.url}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "repo_url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
               }
             ]
           }
@@ -1407,7 +1467,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(time() - jq_pull_request_created_timestamp_seconds{repo=~\"$repo\"}) * on(repo, number) group_left(title, author, checks, draft) topk by (repo, number) (1, jq_pull_request_info{repo=~\"$repo\"})",
+          "expr": "(time() - jq_pull_request_created_timestamp_seconds{repo=~\"$repo\"}) * on(repo, number) group_left(title, author, checks, draft, url) topk by (repo, number) (1, jq_pull_request_info{repo=~\"$repo\"}) * on(repo) group_left(repo_url, pulls_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
           "instant": true,
           "format": "table"
         }
@@ -1501,8 +1561,8 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "Open this pull request on GitHub",
-                    "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
+                    "title": "Open this pull request",
+                    "url": "${__data.fields.url}",
                     "targetBlank": true
                   }
                 ]
@@ -1606,8 +1666,8 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "Open this pull request on GitHub",
-                    "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
+                    "title": "Open this pull request",
+                    "url": "${__data.fields.url}",
                     "targetBlank": true
                   }
                 ]
@@ -1632,11 +1692,47 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "Open the repo's pull requests on GitHub",
-                    "url": "https://github.com/${__value.text}/pulls",
+                    "title": "Open the repo's pull requests",
+                    "url": "${__data.fields.pulls_url}",
                     "targetBlank": true
                   }
                 ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "repo_url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pulls_url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
               }
             ]
           }
@@ -1662,7 +1758,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "time() - topk(10, jq_merged_pull_request_timestamp_seconds{repo=~\"$repo\"})",
+          "expr": "time() - topk(10, jq_merged_pull_request_timestamp_seconds{repo=~\"$repo\"}) * on(repo, number) group_left(url) topk by (repo, number) (1, jq_merged_pull_request_info{repo=~\"$repo\"}) * on(repo) group_left(repo_url, pulls_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
           "instant": true,
           "format": "table"
         }
@@ -1736,8 +1832,8 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "Open on GitHub",
-                    "url": "https://github.com/${__value.text}",
+                    "title": "Open the repo's pull requests",
+                    "url": "${__data.fields.pulls_url}",
                     "targetBlank": true
                   }
                 ]
@@ -1759,7 +1855,7 @@
                 "value": [
                   {
                     "title": "Open this pull request",
-                    "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
+                    "url": "${__data.fields.url}",
                     "targetBlank": true
                   }
                 ]
@@ -1783,6 +1879,42 @@
               {
                 "id": "custom.width",
                 "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "repo_url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pulls_url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
               }
             ]
           }
@@ -2339,7 +2471,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "(time() - jq_ci_workflow_timestamp_seconds{repo=~\"$repo\"}) and on(repo, workflow) (jq_ci_workflow_success{repo=~\"$repo\"} == 0)",
+              "expr": "((time() - jq_ci_workflow_timestamp_seconds{repo=~\"$repo\"}) and on(repo, workflow) (jq_ci_workflow_success{repo=~\"$repo\"} == 0)) * on(repo, workflow) group_left(url) topk by (repo, workflow) (1, jq_ci_workflow_info{repo=~\"$repo\"}) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -2409,8 +2541,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open Actions on GitHub",
-                        "url": "https://github.com/${__value.text}/actions",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
@@ -2436,6 +2568,48 @@
                     "value": 160
                   }
                 ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Workflow"
+                },
+                "properties": [
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Open this run",
+                        "url": "${__data.fields.url}",
+                        "targetBlank": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
               }
             ]
           }
@@ -2458,7 +2632,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "(jq_rhiza_releases_behind{repo=~\"$repo\"} > 0) * on(repo) group_left(ref) topk by (repo) (1, jq_rhiza_template_ref_info{repo=~\"$repo\"})",
+              "expr": "(jq_rhiza_releases_behind{repo=~\"$repo\"} > 0) * on(repo) group_left(ref) topk by (repo) (1, jq_rhiza_template_ref_info{repo=~\"$repo\"}) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -2529,8 +2703,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
@@ -2550,6 +2724,18 @@
                   {
                     "id": "custom.width",
                     "value": 160
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
                   }
                 ]
               }
@@ -2574,7 +2760,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "(jq_local_dirty_files{repo=~\"$repo\"} > 0) * on(repo) group_left(branch) topk by (repo) (1, jq_local_branch_info{repo=~\"$repo\"})",
+              "expr": "(jq_local_dirty_files{repo=~\"$repo\"} > 0) * on(repo) group_left(branch) topk by (repo) (1, jq_local_branch_info{repo=~\"$repo\"}) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -2645,8 +2831,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
@@ -2666,6 +2852,18 @@
                   {
                     "id": "custom.width",
                     "value": 140
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
                   }
                 ]
               }
@@ -2690,7 +2888,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "(time() - jq_pull_request_created_timestamp_seconds{repo=~\"$repo\"}) * on(repo, number) group_left(title, author, checks) topk by (repo, number) (1, jq_pull_request_info{repo=~\"$repo\", checks=\"failure\"})",
+              "expr": "(time() - jq_pull_request_created_timestamp_seconds{repo=~\"$repo\"}) * on(repo, number) group_left(title, author, checks, url) topk by (repo, number) (1, jq_pull_request_info{repo=~\"$repo\", checks=\"failure\"}) * on(repo) group_left(repo_url, pulls_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -2767,8 +2965,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open the repo's pull requests on GitHub",
-                        "url": "https://github.com/${__value.text}/pulls",
+                        "title": "Open the repo's pull requests",
+                        "url": "${__data.fields.pulls_url}",
                         "targetBlank": true
                       }
                     ]
@@ -2809,8 +3007,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open this pull request on GitHub",
-                        "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
+                        "title": "Open this pull request",
+                        "url": "${__data.fields.url}",
                         "targetBlank": true
                       }
                     ]
@@ -2827,11 +3025,47 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open this pull request on GitHub",
-                        "url": "https://github.com/${__data.fields.Repo}/pull/${__data.fields[\"#\"]}",
+                        "title": "Open this pull request",
+                        "url": "${__data.fields.url}",
                         "targetBlank": true
                       }
                     ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "pulls_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
                   }
                 ]
               }
@@ -2856,7 +3090,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "topk by (repo) (1, jq_local_branch_info{repo=~\"$repo\"}) and on(repo) (jq_local_on_default_branch{repo=~\"$repo\"} == 0)",
+              "expr": "(topk by (repo) (1, jq_local_branch_info{repo=~\"$repo\"}) and on(repo) (jq_local_on_default_branch{repo=~\"$repo\"} == 0)) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -2925,11 +3159,23 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
                   }
                 ]
               }
@@ -2954,7 +3200,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "(jq_local_fetch_age_seconds{repo=~\"$repo\"} and on(repo) (jq_local_default_branch_synced{repo=~\"$repo\"} == 0)) * on(repo) group_left(branch) topk by (repo) (1, jq_local_branch_info{repo=~\"$repo\"})",
+              "expr": "(jq_local_fetch_age_seconds{repo=~\"$repo\"} and on(repo) (jq_local_default_branch_synced{repo=~\"$repo\"} == 0)) * on(repo) group_left(branch) topk by (repo) (1, jq_local_branch_info{repo=~\"$repo\"}) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -3024,8 +3270,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
@@ -3051,6 +3297,18 @@
                     "value": 150
                   }
                 ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
               }
             ]
           }
@@ -3073,7 +3331,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "jq_open_issues{repo=~\"$repo\"} > 0",
+              "expr": "(jq_open_issues{repo=~\"$repo\"} > 0) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -3141,8 +3399,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
@@ -3162,6 +3420,18 @@
                   {
                     "id": "custom.width",
                     "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
                   }
                 ]
               }
@@ -3186,7 +3456,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "jq_branch_protected{repo=~\"$repo\"} == 0",
+              "expr": "(jq_branch_protected{repo=~\"$repo\"} == 0) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -3254,8 +3524,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
@@ -3275,6 +3545,18 @@
                   {
                     "id": "custom.width",
                     "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
                   }
                 ]
               }
@@ -3299,7 +3581,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "jq_dependabot_open_alerts{repo=~\"$repo\"} > 0",
+              "expr": "(jq_dependabot_open_alerts{repo=~\"$repo\"} > 0) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -3369,8 +3651,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
@@ -3390,6 +3672,18 @@
                   {
                     "id": "custom.width",
                     "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
                   }
                 ]
               }
@@ -3414,7 +3708,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "jq_dependabot_alerts_enabled{repo=~\"$repo\"} == 0",
+              "expr": "(jq_dependabot_alerts_enabled{repo=~\"$repo\"} == 0) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -3482,8 +3776,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
@@ -3503,6 +3797,18 @@
                   {
                     "id": "custom.width",
                     "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
                   }
                 ]
               }
@@ -3527,7 +3833,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "jq_branch_allows_force_push{repo=~\"$repo\"} == 1",
+              "expr": "(jq_branch_allows_force_push{repo=~\"$repo\"} == 1) * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
               "instant": true,
               "format": "table"
             }
@@ -3595,8 +3901,8 @@
                     "id": "links",
                     "value": [
                       {
-                        "title": "Open on GitHub",
-                        "url": "https://github.com/${__value.text}",
+                        "title": "Open the repo on its forge",
+                        "url": "${__data.fields.repo_url}",
                         "targetBlank": true
                       }
                     ]
@@ -3616,6 +3922,18 @@
                   {
                     "id": "custom.width",
                     "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "repo_url"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
                   }
                 ]
               }
@@ -3795,7 +4113,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "jq_rhiza_template_ref_info{repo=~\"$repo\"}",
+          "expr": "jq_rhiza_template_ref_info{repo=~\"$repo\"} * on(repo) group_left(repo_url) topk by (repo) (1, jq_repo_info{repo=~\"$repo\"})",
           "instant": true,
           "format": "table"
         },
@@ -3895,11 +4213,23 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "Open on GitHub",
-                    "url": "https://github.com/${__value.text}",
+                    "title": "Open the repo on its forge",
+                    "url": "${__data.fields.repo_url}",
                     "targetBlank": true
                   }
                 ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "repo_url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
               }
             ]
           }

@@ -354,3 +354,307 @@ def test_a_source_that_has_never_refreshed_reports_no_health():
 
     assert any('source="github"' in ln for ln in lines)
     assert not any('source="local"' in ln for ln in lines)
+
+
+# -- the forge and the URLs, which live on the identity metrics only ----------
+#
+# Deliberately only there. Adding a label to a metric family starts a new series
+# and orphans the old one, and the thirty families keyed on `repo` alone are the
+# history behind every trend panel and alert rule. The `*_info` metrics are
+# `Always 1` join targets whose label sets churn anyway, so they are where a new
+# dimension costs nothing.
+
+
+def test_the_forge_and_url_ride_on_the_identity_metric():
+    snap = Snapshot(
+        remote={
+            "acme/platform/web": RemoteRepo(
+                name="web",
+                owner="acme/platform",
+                forge="gitlab",
+                url="https://gitlab.com/acme/platform/web",
+                visibility="private",
+            )
+        }
+    )
+
+    line = next(x for x in expose(snap) if x.startswith("jq_repo_info"))
+
+    assert 'forge="gitlab"' in line
+    assert 'repo_url="https://gitlab.com/acme/platform/web"' in line
+    # The owner is the whole nested namespace, not its first segment.
+    assert 'owner="acme/platform"' in line
+
+
+def test_a_repo_with_no_remote_half_still_gets_an_identity_row():
+    """A clone of a repo the forge could not be read for. The row must exist -
+    the dashboard joins on it - and must not claim a forge it does not know."""
+    snap = Snapshot(local={"o/r": LocalRepo(name="r", path="/p")})
+
+    line = next(x for x in expose(snap) if x.startswith("jq_repo_info"))
+
+    assert 'forge="github"' in line
+    assert 'repo_url=""' in line
+
+
+def test_no_other_family_gained_a_forge_label():
+    """The history-preserving half of that decision, pinned. A `forge` label
+    leaking onto a `["repo"]` family would silently orphan 180 days of it."""
+    snap = Snapshot(
+        remote={"o/r": RemoteRepo(name="r", owner="o", forge="gitlab", pushed_at=1.0)},
+        local={"o/r": LocalRepo(name="r", path="/p", dirty_files=2)},
+    )
+
+    carrying = [x.split("{")[0] for x in expose(snap) if 'forge="' in x]
+
+    assert carrying == ["jq_repo_info"]
+
+
+def test_a_pull_requests_url_is_exposed_rather_than_rebuilt():
+    """The dashboard used to paste the repo label onto `https://github.com/` and
+    append the number. That cannot be right for both forges, and never had to be
+    - the API hands the URL over."""
+    snap = Snapshot(
+        remote={
+            "acme/web": RemoteRepo(
+                name="web",
+                owner="acme",
+                forge="gitlab",
+                pulls=(
+                    PullRequest(
+                        number=7,
+                        title="Fix it",
+                        author="someone",
+                        draft=False,
+                        created_at=1.0,
+                        updated_at=2.0,
+                        checks="success",
+                        url="https://gitlab.com/acme/web/-/merge_requests/7",
+                    ),
+                ),
+            )
+        }
+    )
+
+    line = next(x for x in expose(snap) if x.startswith("jq_pull_request_info"))
+
+    assert 'url="https://gitlab.com/acme/web/-/merge_requests/7"' in line
+
+
+def test_the_merged_timeline_itself_gains_no_label():
+    """That timestamp *is* the merged-PR history the panel reads, so the URL
+    goes on a sibling family. A label here would have orphaned every existing
+    series and, until they went stale, shown each merged PR twice."""
+    from jq_collector.state import MergedPull
+
+    snap = Snapshot(
+        remote={
+            "o/r": RemoteRepo(
+                name="r",
+                owner="o",
+                merged=(
+                    MergedPull(
+                        number=4,
+                        title="Landed",
+                        author="someone",
+                        merged_at=100.0,
+                        url="https://github.com/o/r/pull/4",
+                    ),
+                ),
+            )
+        }
+    )
+
+    line = next(x for x in expose(snap) if x.startswith("jq_merged_pull_request_timestamp_seconds"))
+
+    assert "url=" not in line
+
+
+def test_a_merged_pull_requests_url_is_exposed_too():
+    from jq_collector.state import MergedPull
+
+    snap = Snapshot(
+        remote={
+            "acme/web": RemoteRepo(
+                name="web",
+                owner="acme",
+                merged=(
+                    MergedPull(
+                        number=4,
+                        title="Landed",
+                        author="someone",
+                        merged_at=100.0,
+                        url="https://gitlab.com/acme/web/-/merge_requests/4",
+                    ),
+                ),
+            )
+        }
+    )
+
+    line = next(x for x in expose(snap) if x.startswith("jq_merged_pull_request_info"))
+
+    assert 'url="https://gitlab.com/acme/web/-/merge_requests/4"' in line
+
+
+def test_health_is_exposed_for_whatever_reported():
+    """The source list used to be a hardcoded ("github", "local") tuple, which
+    would have dropped gitlab's health silently."""
+    snap = Snapshot(
+        health={
+            "github": SourceHealth(last_success=1.0),
+            "gitlab": SourceHealth(last_success=2.0, errors=3),
+            "local": SourceHealth(last_success=3.0),
+        }
+    )
+
+    lines = [x for x in expose(snap) if x.startswith("jq_collector_last_success")]
+
+    assert {'source="github"', 'source="gitlab"', 'source="local"'} == {
+        x.split("{")[1].split("}")[0] for x in lines
+    }
+
+
+def test_the_pull_request_listing_url_is_carried_per_forge():
+    """No API reports this one, so each collector builds it - GitHub spells it
+    /pulls and GitLab /-/merge_requests. The dashboard reads the label rather
+    than learning either convention."""
+    snap = Snapshot(
+        remote={
+            "acme/web": RemoteRepo(
+                name="web",
+                owner="acme",
+                forge="gitlab",
+                url="https://gitlab.com/acme/web",
+                pulls_url="https://gitlab.com/acme/web/-/merge_requests",
+            )
+        }
+    )
+
+    line = next(x for x in expose(snap) if x.startswith("jq_repo_info"))
+
+    assert 'pulls_url="https://gitlab.com/acme/web/-/merge_requests"' in line
+
+
+def test_the_ci_run_url_is_exposed_on_the_info_metric():
+    """Linking to the run itself, not to a listing page whose path differs per
+    forge - and strictly more useful than the /actions link it replaces."""
+    snap = Snapshot(
+        remote={
+            "acme/web": RemoteRepo(
+                name="web",
+                owner="acme",
+                ci_conclusion="failure",
+                ci_workflow="test",
+                ci_url="https://gitlab.com/acme/web/-/jobs/9",
+            )
+        }
+    )
+
+    line = next(x for x in expose(snap) if x.startswith("jq_ci_last_run_info"))
+
+    assert 'url="https://gitlab.com/acme/web/-/jobs/9"' in line
+
+
+def test_each_workflow_carries_its_own_run_url():
+    """A separate family from jq_ci_workflow_success, which is a real gauge with
+    history - a label there would have orphaned all of it."""
+    snap = Snapshot(
+        remote={
+            "acme/web": RemoteRepo(
+                name="web",
+                owner="acme",
+                workflows=(
+                    WorkflowRun(
+                        name="lint",
+                        conclusion="failure",
+                        finished_at=10.0,
+                        duration=1.0,
+                        url="https://gitlab.com/acme/web/-/jobs/1",
+                    ),
+                ),
+            )
+        }
+    )
+
+    lines = [x for x in expose(snap) if x.startswith("jq_ci_workflow_info")]
+
+    assert len(lines) == 1
+    assert 'workflow="lint"' in lines[0]
+    assert 'url="https://gitlab.com/acme/web/-/jobs/1"' in lines[0]
+
+
+def test_the_gauge_families_behind_the_history_carry_no_url():
+    """The other half of the label decision. A `url` label leaking onto a
+    `["repo"]` gauge would silently orphan 180 days of its series."""
+    snap = Snapshot(
+        remote={
+            "o/r": RemoteRepo(
+                name="r",
+                owner="o",
+                url="https://github.com/o/r",
+                pulls_url="https://github.com/o/r/pulls",
+                ci_conclusion="success",
+                ci_workflow="test",
+                ci_url="https://github.com/o/r/actions/runs/1",
+                workflows=(
+                    WorkflowRun(
+                        name="test",
+                        conclusion="success",
+                        finished_at=1.0,
+                        duration=1.0,
+                        url="https://github.com/o/r/actions/runs/1",
+                    ),
+                ),
+            )
+        }
+    )
+
+    carrying = sorted({x.split("{")[0] for x in expose(snap) if 'url="http' in x})
+
+    assert carrying == [
+        "jq_ci_last_run_info",
+        "jq_ci_workflow_info",
+        "jq_repo_info",
+    ], "a url label reached a family that carries history"
+
+
+def test_only_the_join_targets_carry_a_url():
+    """The census, pinned. Every family here is an `Always 1` join target whose
+    label set already churns as PRs open and close; a `url` reaching anything
+    else would start a new series and orphan its history."""
+    from jq_collector.state import MergedPull
+
+    snap = Snapshot(
+        remote={
+            "o/r": RemoteRepo(
+                name="r",
+                owner="o",
+                url="https://github.com/o/r",
+                pulls_url="https://github.com/o/r/pulls",
+                ci_conclusion="success",
+                ci_workflow="test",
+                ci_url="https://github.com/o/r/actions/runs/1",
+                workflows=(wf("test", "success"),),
+                pulls=(pull(7, "success"),),
+                merged=(
+                    MergedPull(
+                        number=4,
+                        title="Landed",
+                        author="someone",
+                        merged_at=100.0,
+                        url="https://github.com/o/r/pull/4",
+                    ),
+                ),
+            )
+        }
+    )
+
+    families = sorted({x.split("{")[0] for x in expose(snap) if "url=" in x})
+
+    assert families == [
+        "jq_ci_last_run_info",
+        "jq_ci_workflow_info",
+        "jq_merged_pull_request_info",
+        "jq_pull_request_info",
+        "jq_repo_info",
+    ]

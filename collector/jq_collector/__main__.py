@@ -1,8 +1,14 @@
 """Entry point: two refresh loops feeding one /metrics endpoint.
 
 The loops run on their own cadences and write into a shared store, so a scrape
-never waits on the GitHub API. Prometheus can poll every 15s while GitHub is
+never waits on a forge's API. Prometheus can poll every 15s while the forges are
 only asked every five minutes.
+
+There are two loops and not three, though there are now two forges. The remote
+loop collects both and publishes once, because `Store.update(remote=...)`
+replaces the whole map: a loop per forge would have each thread publish only its
+own share, and the board would show half the fleet flickering against the other
+half. Health and errors are still recorded per forge inside that one pass.
 """
 
 from __future__ import annotations
@@ -17,10 +23,11 @@ from collections.abc import Callable
 from prometheus_client import REGISTRY, start_http_server
 
 from . import github as gh
+from . import gitlab as gl
 from . import localgit
 from .config import Config
 from .metrics import FleetCollector
-from .state import SourceHealth, Store
+from .state import RemoteRepo, SourceHealth, Store
 
 log = logging.getLogger("jq_collector")
 
@@ -36,7 +43,18 @@ def _refresh_local(cfg: Config, store: Store) -> None:
     )
 
 
-def _refresh_github(cfg: Config, store: Store) -> None:
+def _refresh_remote(cfg: Config, store: Store) -> None:
+    """Collect every forge in the fleet and publish the result as one snapshot.
+
+    One pass over both forges rather than a loop each, because
+    ``Store.update(remote=...)`` replaces the whole map: two threads writing it
+    would each publish only their own share, and the board would show half the
+    fleet flickering against the other half.
+
+    GitHub is collected even when no repo lives there, because it is where the
+    template's releases are published and therefore where drift is measured
+    from, whichever forge the repo pinning it is on.
+    """
     snap = store.snapshot()
     # (default_branch_sha, ref) per repo: the pointer can only have changed if
     # the branch head moved, so this keeps the drift read correct without
@@ -46,7 +64,7 @@ def _refresh_github(cfg: Config, store: Store) -> None:
     }
     # (artifact id, percent) per repo: an unchanged artifact means the report
     # behind it is byte-identical, so there is nothing to gain from pulling the
-    # zip down again.
+    # zip down again. GitLab reports coverage as a field and ignores this.
     coverage_cache = {
         name: (repo.coverage_artifact, (repo.coverage, repo.coverage_lines))
         if repo.coverage is not None
@@ -54,18 +72,53 @@ def _refresh_github(cfg: Config, store: Store) -> None:
         for name, repo in snap.remote.items()
         if repo.coverage_artifact
     }
-    remote, api, latest, excluded = gh.collect(cfg, ref_cache, coverage_cache)
-    try:
-        store.update(
-            remote=remote,
-            excluded=excluded,
-            latest_template_ref=latest,
-            rate_limit_remaining=api.rate_remaining,
-            rate_limit_limit=api.rate_limit,
-            rate_limit_reset=api.rate_reset,
+
+    by_forge = cfg.repos_by_forge()
+    remote: dict[str, RemoteRepo] = {}
+    excluded: set[str] = set()
+    # The template's release tags, fetched by the GitHub pass and needed by the
+    # GitLab one to measure drift against the same list.
+    template_tags: list[str] = []
+
+    def gather_github() -> None:
+        result, api, tags, dropped = gh.collect(
+            cfg, ref_cache, coverage_cache, fleet=by_forge.get("github", ())
         )
-    finally:
-        api.close()
+        try:
+            remote.update(result)
+            excluded.update(dropped)
+            template_tags[:] = tags
+            store.update(
+                latest_template_ref=tags[0] if tags else "",
+                rate_limit_remaining=api.rate_remaining,
+                rate_limit_limit=api.rate_limit,
+                rate_limit_reset=api.rate_reset,
+            )
+        finally:
+            api.close()
+
+    def gather_gitlab() -> None:
+        result, api, dropped = gl.collect(
+            cfg,
+            ref_cache,
+            coverage_cache,
+            fleet=by_forge["gitlab"],
+            tags=template_tags,
+        )
+        try:
+            remote.update(result)
+            excluded.update(dropped)
+        finally:
+            api.close()
+
+    # Health is recorded per forge, so a GitLab outage shows up as
+    # jq_collector_errors{source="gitlab"} and leaves the GitHub repos standing
+    # rather than shortening the fleet silently.
+    _run_once("github", store, gather_github)
+    if by_forge.get("gitlab"):
+        _run_once("gitlab", store, gather_gitlab)
+
+    store.update(remote=remote, excluded=frozenset(excluded))
 
 
 def _run_once(source: str, store: Store, work: Callable[[], None]) -> None:
@@ -99,19 +152,37 @@ def _run_once(source: str, store: Store, work: Callable[[], None]) -> None:
     log.info("%s refresh finished in %.1fs", source, elapsed)
 
 
+def _tick_local(cfg: Config, store: Store) -> None:
+    """One local refresh, health recorded."""
+    _run_once("local", store, lambda: _refresh_local(cfg, store))
+
+
 def _loop(
-    source: str,
     interval: int,
-    store: Store,
-    work: Callable[[], None],
+    tick: Callable[[], None],
     stop: threading.Event,
 ) -> None:
-    """Refresh forever. Waits first, because main() has already seeded once."""
+    """Refresh forever. Waits first, because main() has already seeded once.
+
+    The tick owns its own health bookkeeping. That moved out of here when the
+    remote pass grew from one source to one per forge: a single `source` name
+    per loop could no longer describe what the tick had actually talked to.
+
+    Which leaves this loop holding the last resort. A tick records what each
+    forge did, but the work between forges - merging their results and
+    publishing the snapshot - belongs to no single source and would otherwise
+    escape. An exception reaching a thread's target kills the thread silently,
+    and the loop is the only thing that will ever try again, so nothing may get
+    out of here.
+    """
     while not stop.is_set():
         stop.wait(interval)
         if stop.is_set():
             return
-        _run_once(source, store, work)
+        try:
+            tick()
+        except Exception:
+            log.exception("refresh tick failed")
 
 
 def main() -> None:
@@ -122,19 +193,23 @@ def main() -> None:
     cfg = Config()
     if not cfg.token:
         log.warning("no GITHUB_TOKEN set - unauthenticated GitHub calls are limited to 60/hour")
+    # Only warn about the token a fleet actually needs. A GitHub-only deployment
+    # must not start complaining about GitLab credentials it has no use for.
+    if cfg.repos_by_forge().get("gitlab") and not cfg.gitlab_token:
+        log.warning("no GITLAB_TOKEN set - only public GitLab projects will be readable")
 
     store = Store()
 
     # Seed both sources BEFORE opening the port. The local pass takes ~2s and
-    # the GitHub pass ~11s, and serving in between would publish a snapshot with
+    # the remote pass ~11s, and serving in between would publish a snapshot with
     # working copies but no CI, drift or pull requests - which Prometheus stores
     # as a real observation, leaving a permanent dip in the history that reads
     # as "nothing was behind the template" rather than "we had not looked yet".
     # A refused connection for those few seconds is an honest target-down.
-    # GitHub runs first: the local pass needs its default-branch names to know
-    # which local ref to compare against, and nothing now flows the other way.
-    _run_once("github", store, lambda: _refresh_github(cfg, store))
-    _run_once("local", store, lambda: _refresh_local(cfg, store))
+    # The forges run first: the local pass needs their default-branch names to
+    # know which local ref to compare against, and nothing flows the other way.
+    _refresh_remote(cfg, store)
+    _tick_local(cfg, store)
 
     # The default registry already carries the process and GC collectors, so
     # adding ours to it keeps exporter self-monitoring on the same endpoint.
@@ -146,27 +221,15 @@ def main() -> None:
     threads = [
         threading.Thread(
             target=_loop,
-            args=(
-                "local",
-                cfg.local_interval,
-                store,
-                lambda: _refresh_local(cfg, store),
-                stop,
-            ),
+            args=(cfg.local_interval, lambda: _tick_local(cfg, store), stop),
             daemon=True,
             name="local",
         ),
         threading.Thread(
             target=_loop,
-            args=(
-                "github",
-                cfg.github_interval,
-                store,
-                lambda: _refresh_github(cfg, store),
-                stop,
-            ),
+            args=(cfg.github_interval, lambda: _refresh_remote(cfg, store), stop),
             daemon=True,
-            name="github",
+            name="remote",
         ),
     ]
     # The seed above already ran both, so hold each loop off for one interval.
