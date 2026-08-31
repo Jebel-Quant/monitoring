@@ -10,24 +10,12 @@ A Grafana board for the state of your repo fleet — template drift, CI on the
 default branch, open pull requests, and the working copies on this machine —
 with Prometheus keeping the history and six alert rules on top.
 
-Everything runs in Docker on `localhost`. Nothing is discovered: a repo is on
-the board because you listed it in `repos.yml`, and for no other reason.
-
-## What you need
-
-Docker (for Prometheus and Grafana), [`uv`](https://docs.astral.sh/uv/) (for the
-collector, which runs on your machine rather than in a container), and the
-[`gh` CLI](https://cli.github.com) signed in — `up.sh` mints the token from it,
-otherwise put a `GITHUB_TOKEN` in `.env` yourself.
+One container, one file. Nothing is discovered: a repo is on the board because
+you listed it in `repos.yml`, and for no other reason.
 
 ## Recipe
 
-```bash
-git clone https://github.com/Jebel-Quant/monitoring.git && cd monitoring
-./scripts/up.sh          # writes repos.yml + .env from the examples, then stops
-```
-
-Now **edit `repos.yml`** — one entry per repo you want on the board:
+Write a `repos.yml` — one entry per repo you want on the board:
 
 ```yaml
 repos:
@@ -38,39 +26,59 @@ repos:
 
 `owner/name` comes from each checkout's `origin`, so the path is all you write,
 and the path is used as written — a checkout does not have to live at
-`<root>/<owner>/<name>`.
-Then:
+`<root>/<owner>/<name>`. Then:
 
 ```bash
-./scripts/up.sh          # builds and starts everything
+docker run -d --name jq-fleet \
+  -p 127.0.0.1:3000:3000 \
+  -v "$PWD/repos.yml:/config/repos.yml:ro" \
+  -v "$HOME:/host:ro" \
+  -v jq-fleet-data:/data \
+  -e GITHUB_TOKEN="$(gh auth token)" \
+  ghcr.io/jebel-quant/monitoring:latest
+
 open http://localhost:3000/d/jq-fleet
 ```
 
-The board fills in within a minute — the local panels first, the GitHub panels
-after the first API refresh. `repos.yml` is gitignored: it describes one machine's folders. Nothing is
-generated from it — the collector reads it at every launch, so there is no
-second file to fall out of step.
+The board fills in within a minute. That is the whole install — the dashboard,
+the datasource, the alert rules and the scrape config are in the image, so
+there is nothing to clone and nothing on your disk but `repos.yml`.
+
+### The four flags
+
+| | |
+|---|---|
+| `-v .../repos.yml:/config/repos.yml:ro` | Required. The fleet — [details](docs/configuration.md) |
+| `-v "$HOME:/host:ro"` | Your home directory, read-only, so `~/...` in `repos.yml` resolves. Leave it out and the working-copy panels stay empty; everything GitHub reports still works |
+| `-v jq-fleet-data:/data` | Prometheus history and Grafana's database. Leave it out and both start empty at every run |
+| `-e GITHUB_TOKEN=...` | Needs `repo` and `read:org`, and must read every repo you listed. Without one GitHub allows 60 calls an hour, which is not a fleet |
+
+`docker compose up -d` does the same thing with the flags written down; see
+[`docker-compose.yml`](docker-compose.yml).
 
 ## Then what
 
 | | |
 |---|---|
-| Add or drop a repo | edit `repos.yml`, `./scripts/up.sh` again — [details](docs/configuration.md) |
-| Erase a dropped repo's history | [`./scripts/purge-repo.sh owner/name`](docs/configuration.md#dropping-a-repo) (irreversible) |
-| Stop | `./scripts/down.sh` (add `--volumes` to discard the history too) |
-| See the collector's log | `tail -f .collector-logs/collector.log` — it runs on your machine, not in Docker ([why](docs/operations.md#the-collector-runs-on-your-machine)) |
-| Edit the board | change `grafana/dashboards/fleet.json`; it reloads in 30s — [read the traps first](docs/dashboard.md#traps-worth-not-re-introducing) |
+| Add or drop a repo | edit `repos.yml`, `docker restart jq-fleet` — [details](docs/configuration.md) |
+| Erase a dropped repo's history | [`docker exec jq-fleet purge-repo owner/name`](docs/configuration.md#dropping-a-repo) (irreversible) |
+| Stop | `docker rm -f jq-fleet` (add `docker volume rm jq-fleet-data` to discard the history too) |
+| See what it is doing | `docker logs -f jq-fleet` — all three processes, prefixed ([why one container](docs/operations.md#one-container-three-processes)) |
+| Edit the board | change `grafana/dashboards/fleet.json` and rebuild — [read the traps first](docs/dashboard.md#traps-worth-not-re-introducing) |
 | Get notified | add a contact point under *Alerting → Contact points* — [why it is not provisioned](docs/dashboard.md#alerting) |
+| Migrate from the old two-container stack | [carry the Prometheus history over](docs/operations.md#coming-from-the-two-container-stack) |
 
 | | |
 |---|---|
 | Dashboard | <http://localhost:3000/d/jq-fleet> |
 | Alert rules | <http://localhost:3000/alerting/list> |
-| Prometheus | <http://localhost:9090> |
-| Raw metrics | <http://localhost:9109/metrics> |
+| Prometheus | <http://localhost:9090> — add `-p 127.0.0.1:9090:9090` |
+| Raw metrics | <http://localhost:9109/metrics> — add `-p 127.0.0.1:9109:9109` |
 
-All three ports bind to `127.0.0.1` only, because anonymous read access is on.
-The board opens without signing in; `admin` / `admin` is only for settings.
+Publish port 3000 to `127.0.0.1` only, as above, because anonymous read access
+is on: the board opens without signing in, and `admin` / `admin` is only for
+settings. A `0.0.0.0` binding would serve private repo names and pull request
+titles to the whole LAN without a password.
 
 ## Docs
 
@@ -78,7 +86,7 @@ Also published as a book: **<https://jebel-quant.github.io/monitoring/>**
 
 | | |
 |---|---|
-| [Configuration](docs/configuration.md) | `repos.yml`, `.env`, the API budget |
+| [Configuration](docs/configuration.md) | `repos.yml`, the environment, the API budget |
 | [What it watches](docs/metrics.md) | the four subjects, the metrics, and why each is shaped that way |
 | [The dashboard](docs/dashboard.md) | reading it, editing it, alerting, and the query traps |
 | [Day to day](docs/operations.md) | why panels say *No data*, and what the sign-in button is |

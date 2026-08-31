@@ -18,13 +18,13 @@ drift is the one thing that changes while the clone stands still, because it is
 the upstream that moved.
 
 Nothing here searches for checkouts either. A repo is read at the path
-``JQ_REPO_PATHS`` gives for it, or failing that at ``<repo_root>/<owner>/<name>``
-- which is exactly where the generated compose override mounts it, so inside the
-container the default is always right. Outside it, paths are whatever they are on
-disk: ``repos.yml`` may well say ``~/repos/tschm/rhiza_projects/cs`` for
-``tschm/cs``, and no amount of joining owner to name will produce that. Either
-way the fleet is decided by ``repos.yml``, not by whatever happened to be lying
-around under a scanned directory.
+``repos.py`` resolved for it out of ``repos.yml``, and those paths are whatever
+they are on disk: ``repos.yml`` may well say ``~/repos/tschm/rhiza_projects/cs``
+for ``tschm/cs``, and no amount of joining owner to name will produce that. The
+``<repo_root>/<owner>/<name>`` fallback is off by default and survives only for
+a deployment laid out that way. Either way the fleet is decided by
+``repos.yml``, not by whatever happened to be lying around under a scanned
+directory.
 """
 
 from __future__ import annotations

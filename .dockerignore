@@ -1,0 +1,15 @@
+# Your machine's business, and it is mounted at runtime rather than baked in.
+repos.yml
+.env
+
+_book/
+docs/
+.git/
+.github/
+.collector-logs/
+**/.venv/
+**/.ruff_cache/
+**/.pytest_cache/
+**/__pycache__/
+**/_tests/
+**/.coverage

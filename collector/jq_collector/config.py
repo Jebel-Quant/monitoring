@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
+
+from .repos import FleetError, load
+
+log = logging.getLogger(__name__)
 
 
 def _int(name: str, default: int) -> int:
@@ -27,7 +32,8 @@ def _pairs(name: str) -> dict[str, str]:
     one repo's working-copy panels off the board and say nothing about why,
     which is the failure mode this whole module is shaped to avoid; refusing to
     start is louder and cheaper to diagnose. A path containing a comma cannot
-    be expressed here - ``scripts/gen-repos.py`` refuses to emit one.
+    be expressed here at all, which is one more reason repos.yml is the place
+    the layout is normally written down.
     """
     mapping: dict[str, str] = {}
     for item in _csv(name):
@@ -43,18 +49,21 @@ def _pairs(name: str) -> dict[str, str]:
 class Config:
     """Everything the collector needs to know about its environment.
 
-    The fleet is an explicit list: ``JQ_REPOS`` names every monitored repo as
-    ``owner/name``, and nothing else is ever gathered. There used to be a
-    whole-org sweep as well, which meant the board's contents were decided by
-    GitHub rather than by you - a new repo in the org appeared unasked, and a
-    shared org like cvxgrp dragged in a hundred repos that were not yours.
+    The fleet is an explicit list, and nothing else is ever gathered. There
+    used to be a whole-org sweep as well, which meant the board's contents were
+    decided by GitHub rather than by you - a new repo in the org appeared
+    unasked, and a shared org like cvxgrp dragged in a hundred repos that were
+    not yours.
 
-    On a laptop the list is generated from ``repos.yml`` by
-    ``scripts/gen-repos.py``, which also mounts each checkout at
-    ``$JQ_REPO_ROOT/<owner>/<name>``. Setting it by hand works too, and then
-    nothing mounts the checkouts. Both halves read the same list, so the GitHub
-    panels and the working-copy panels can never disagree about who is in the
-    fleet.
+    ``repos.yml`` is where that list lives, and it is read here directly: both
+    the fleet and each checkout's path come out of the one file, at startup,
+    with nothing generated in between to go stale. ``JQ_REPOS`` and
+    ``JQ_REPO_PATHS`` remain for a deployment that has no file to mount - a
+    server, or CI - and ``JQ_REPO_PATHS`` still wins over the file, so one
+    awkward path can be corrected without editing it.
+
+    Both halves read the same list, so the GitHub panels and the working-copy
+    panels can never disagree about who is in the fleet.
     """
 
     repos: tuple[str, ...] = field(default_factory=lambda: _csv("JQ_REPOS"))
@@ -62,19 +71,25 @@ class Config:
     token: str = os.environ.get("GITHUB_TOKEN", "")
     api: str = os.environ.get("GITHUB_API", "https://api.github.com")
 
-    # Where the checkouts are, for repos JQ_REPO_PATHS does not name: one per
-    # repo at <repo_root>/<owner>/<name>. That is exactly where the generated
-    # compose override bind-mounts them, so in the container this is all that
-    # is needed. Set empty to skip local scanning entirely, which is the right
-    # setting anywhere there are no working copies to report on - the local
-    # panels then simply have nothing to say.
-    repo_root: str = os.environ.get("JQ_REPO_ROOT", "/repos")
+    # The fleet file. Read when it is there; when it is not, JQ_REPOS and
+    # JQ_REPO_PATHS are the whole story. /config/repos.yml is where the image
+    # expects it to be mounted.
+    repos_file: str = os.environ.get("JQ_REPOS_FILE", "/config/repos.yml")
 
-    # Explicit path per repo, as owner/name=path. Needed whenever a checkout
-    # does not sit at <repo_root>/<owner>/<name> - which is normal outside the
-    # container, where paths are whatever they are on disk rather than whatever
-    # a bind mount normalised them to. `scripts/gen-repos.py --env` emits this
-    # from repos.yml, so the layout is stated once and in one place.
+    # Where the host's home directory is mounted, and therefore what `~` in
+    # repos.yml means. Set to /host in the image; empty when the collector runs
+    # natively, where `~` is just `~`. One mount for the whole fleet is what
+    # lets repos.yml name a checkout at any path at all - the per-repo bind
+    # mounts it replaced could only express <root>/<owner>/<name>.
+    host_root: str = os.environ.get("JQ_HOST_ROOT", "")
+
+    # Last-resort fallback for a repo no path is known for: <repo_root>/<owner>/
+    # <name>. Off by default, because repos.yml states every path outright.
+    # Setting it is for a deployment that checks its fleet out in that shape.
+    repo_root: str = os.environ.get("JQ_REPO_ROOT", "")
+
+    # Explicit path per repo, as owner/name=path. Filled from repos.yml, and
+    # overridable from the environment for a deployment that has no file.
     repo_paths: dict[str, str] = field(default_factory=lambda: _pairs("JQ_REPO_PATHS"))
 
     # owner/name of the repo whose releases define "up to date".
@@ -121,6 +136,26 @@ class Config:
     # the network; it is for when you would rather it were never fetched, since
     # its name, workflow names, PR titles and branch names are all disclosure.
     public_only: bool = os.environ.get("JQ_PUBLIC_ONLY", "false").lower() == "true"
+
+    def __post_init__(self) -> None:
+        """Fold repos.yml in, when there is one.
+
+        Refuses to start on a file it cannot act on. The alternative - carrying
+        on with a short fleet - takes repos off the board and says nothing about
+        why, and a board that is quietly incomplete is worse than one that did
+        not come up.
+        """
+        if not self.repos_file or not os.path.isfile(self.repos_file):
+            return
+        try:
+            fleet, paths = load(self.repos_file, self.host_root)
+        except FleetError as exc:
+            raise SystemExit(f"repos.yml: {exc}") from exc
+        object.__setattr__(self, "repos", fleet)
+        # The environment wins: it is the narrower, more deliberate statement,
+        # and it is how one path can be corrected without touching the file.
+        object.__setattr__(self, "repo_paths", {**paths, **self.repo_paths})
+        log.info("fleet: %d repos, %d with a checkout", len(fleet), len(self.repo_paths))
 
     def is_ignored(self, owner: str, name: str) -> bool:
         return name in self.ignore or f"{owner}/{name}" in self.ignore

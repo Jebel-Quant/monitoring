@@ -11,5 +11,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/dashboards
+      # Beside the rest of the provisioning, not under /var/lib/grafana: that
+      # is GF_PATHS_DATA, which the image points at the /data volume, and a
+      # dashboard shipped in the image must not depend on a mount to exist.
+      path: /etc/grafana/dashboards
       foldersFromFilesStructure: false

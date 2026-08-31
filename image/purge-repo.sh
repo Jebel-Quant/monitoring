@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
 # Permanently delete a repo's history from Prometheus.
 #
-#   ./scripts/purge-repo.sh Jebel-Quant/rhiza-brainbug
+#   docker exec jq-fleet purge-repo Jebel-Quant/rhiza-brainbug
 #
 # Use after archiving or deleting a repo, when you do not want its old rows
 # lingering in long time windows. THIS IS IRREVERSIBLE - the samples are gone.
+#
+# The admin API this needs is off unless the container was started with
+# -e JQ_PROM_ADMIN_API=true, because it deletes series with no authentication
+# at all and the board is otherwise a read-only thing.
 #
 # Both label generations are purged: this board once used a bare repo name and
 # now uses owner/name, so a repo that predates that change has series under both.
 set -euo pipefail
 
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
 if [[ $# -eq 0 ]]; then
-  echo "usage: $0 <owner/name> [more...]" >&2
+  echo "usage: purge-repo <owner/name> [more...]" >&2
   exit 64
 fi
 
 PROM=http://localhost:9090
+
 selectors=()
 for repo in "$@"; do
   # A bare name would match nothing dangerous, but an empty or wildcard
@@ -30,7 +33,23 @@ for repo in "$@"; do
   [[ "$repo" == */* ]] && selectors+=("{repo=\"${repo##*/}\"}")
 done
 
-since() { date -u -v-3650d +%s 2>/dev/null || date -u -d '10 years ago' +%s; }
+# Fail here, with the fix in hand, rather than after printing a delete plan and
+# then reporting three HTTP 404s that look like a bug.
+if [[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+        "$PROM/api/v1/admin/tsdb/clean_tombstones")" == "404" ]]; then
+  cat >&2 <<'MSG'
+the Prometheus admin API is disabled, so nothing can be deleted.
+
+Restart the container with it on, purge, then restart it without:
+
+    docker rm -f jq-fleet
+    docker run ... -e JQ_PROM_ADMIN_API=true ghcr.io/jebel-quant/monitoring
+    docker exec jq-fleet purge-repo owner/name
+MSG
+  exit 69
+fi
+
+since() { date -u -d '10 years ago' +%s 2>/dev/null || date -u -v-3650d +%s; }
 
 # Series metadata: what the index still lists.
 count() {
@@ -71,10 +90,6 @@ if [[ "$total" -eq 0 ]]; then
   exit 0
 fi
 
-echo "enabling the admin API..."
-docker compose -f docker-compose.yml -f docker-compose.admin.yml up -d prometheus >/dev/null
-until [[ "$(curl -s -o /dev/null -w '%{http_code}' "$PROM/-/ready")" == "200" ]]; do sleep 1; done
-
 for sel in "${selectors[@]}"; do
   curl -s -X POST -G "$PROM/api/v1/admin/tsdb/delete_series" --data-urlencode "match[]=$sel" \
     -o /dev/null -w "  delete $sel -> HTTP %{http_code}\n"
@@ -82,10 +97,6 @@ done
 
 # delete_series only tombstones; this reclaims the blocks on disk.
 curl -s -X POST "$PROM/api/v1/admin/tsdb/clean_tombstones" -o /dev/null -w "  clean_tombstones -> HTTP %{http_code}\n"
-
-echo "disabling the admin API again..."
-docker compose up -d prometheus >/dev/null
-until [[ "$(curl -s -o /dev/null -w '%{http_code}' "$PROM/-/ready")" == "200" ]]; do sleep 1; done
 
 echo "remaining:"
 stale=0
