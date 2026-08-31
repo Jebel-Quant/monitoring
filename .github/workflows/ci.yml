@@ -120,9 +120,10 @@ jobs:
             - repo: Jebel-Quant/actions
           YML
 
-          # No GITHUB_TOKEN: the GitHub half is then rate-limited to 60 calls an
-          # hour and will mostly fail, which is fine - this asserts the fleet
-          # resolved and the exporter is serving, not that GitHub answered.
+          # No GITHUB_TOKEN on purpose: this asserts the container comes up and
+          # resolves the fleet off repos.yml, which needs no network. The
+          # GitHub half will fail (several endpoints 401 unauthenticated), so
+          # nothing below may depend on it having answered.
           docker run -d --name fleet \
             -p 127.0.0.1:9109:9109 \
             -v "$PWD/repos.yml:/config/repos.yml:ro" \
@@ -135,11 +136,20 @@ jobs:
             sleep 5
           done
 
-          docker logs fleet
-          # Both repos on the board, and the awkward path found: `cloned` is 1
-          # only if the collector reached the checkout through the /host mount.
+          docker logs fleet > logs.txt 2>&1
+          cat logs.txt
+
+          # The awkward path was found: `cloned` is 1 only if the collector
+          # reached the checkout through the /host mount, which is the whole
+          # reason repos.yml carries paths rather than deriving them.
           grep -q 'jq_repo_cloned{repo="Jebel-Quant/rhiza"} 1.0' metrics.txt
-          grep -q 'repo="Jebel-Quant/actions"' metrics.txt
+
+          # Both entries parsed, one of them with no checkout. Asserted on the
+          # startup line rather than on a metric: a repo with no checkout
+          # reaches the board only through the GitHub half, which has no token
+          # here - so `repo="Jebel-Quant/actions"` is legitimately absent from
+          # /metrics and asserting on it would be testing GitHub, not this.
+          grep -q 'fleet: 2 repos, 1 with a checkout' logs.txt
 
       # A refusal at startup, not a board that is quietly one repo short. This
       # is the failure mode the whole config path is shaped to avoid.

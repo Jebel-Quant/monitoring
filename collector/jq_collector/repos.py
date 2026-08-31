@@ -100,8 +100,14 @@ def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None]:
     raw_path = item.get("path")
 
     if raw_path is None:
+        # Name the offending value, not just the rule. "entry 7" in a
+        # twenty-five entry file means counting; the value is searchable.
+        if not named:
+            raise FleetError(
+                f"entry {index} ({item!r}) has neither a `path` nor a `repo: owner/name`"
+            )
         if "/" not in named:
-            raise FleetError(f"entry {index} needs a `path`, or a `repo:` of the form owner/name")
+            raise FleetError(f"entry {index}: repo {named!r} is not of the form owner/name")
         return named, None
 
     path = resolve_path(str(raw_path), host_root)

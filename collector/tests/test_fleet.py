@@ -451,6 +451,13 @@ def test_a_broken_entry_refuses_to_start(tmp_path, body):
         repos.load(write_fleet(tmp_path, body))
 
 
+def test_the_refusal_names_the_offending_value(tmp_path):
+    """`entry 7` in a twenty-five entry file means counting lines. The value is
+    what you can search the file for."""
+    with pytest.raises(repos.FleetError, match="no-slash"):
+        repos.load(write_fleet(tmp_path, "  - repo: no-slash\n"))
+
+
 def test_a_directory_that_is_not_a_checkout_is_refused(tmp_path):
     (tmp_path / "empty").mkdir()
     with pytest.raises(repos.FleetError):
