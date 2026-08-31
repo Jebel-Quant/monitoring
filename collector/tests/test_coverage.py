@@ -145,7 +145,7 @@ class StubAPI:
         self.artifact_id = artifact_id
         self.downloads: list[str] = []
 
-    def list_repos(self):
+    def list_repos(self, _fleet=None):
         return [
             {
                 "full_name": "o/r",

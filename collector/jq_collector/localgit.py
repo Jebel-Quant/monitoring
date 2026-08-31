@@ -34,6 +34,7 @@ import os
 import subprocess
 import time
 
+from . import origin
 from .config import Config
 from .state import LocalRepo
 
@@ -60,22 +61,17 @@ def _git(path: str, *args: str) -> str | None:
     return result.stdout.strip()
 
 
-def origin_owner_name(path: str) -> tuple[str, str] | None:
-    """The ``(owner, name)`` this clone points at, or None if there is no origin."""
+def origin_full_name(path: str) -> str | None:
+    """The ``namespace/name`` this clone points at, or None without an origin.
+
+    A thin wrapper over `origin.parse` so the scan keeps using this module's
+    logging `_git`; the URL grammar itself lives in one place now.
+    """
     url = _git(path, "remote", "get-url", "origin")
     if not url:
         return None
-    url = url.removesuffix(".git")
-    if url.startswith("git@"):
-        _, _, tail = url.partition(":")
-    elif "://" in url:
-        tail = url.split("://", 1)[1].split("/", 1)[-1]
-    else:
-        tail = url
-    parts = [p for p in tail.split("/") if p]
-    if len(parts) < 2:
-        return None
-    return parts[-2], parts[-1]
+    parsed = origin.parse(url)
+    return parsed.full_name if parsed else None
 
 
 def _template_ref(path: str, pointer: str) -> str:
@@ -375,12 +371,14 @@ def scan(
     for key in cfg.repos:
         if "/" not in key or key in skip:
             continue
-        owner, repo_name = key.split("/", 1)
+        # rsplit, not split: a GitLab namespace nests, so everything before the
+        # last slash is the owner and only the tail is the repo's own name.
+        owner, repo_name = key.rsplit("/", 1)
         path = cfg.repo_paths.get(key)
         if path is None:
             if not root:
                 continue
-            path = os.path.join(root, owner, repo_name)
+            path = os.path.join(root, *key.split("/"))
         # `.git` is a directory in a plain checkout and a file in a worktree.
         if not os.path.exists(os.path.join(path, ".git")):
             # Not mounted, or mounted somewhere else. Normal for a repo you
@@ -391,16 +389,12 @@ def scan(
         # The mount point claims to be this repo; the origin remote is the only
         # thing that can confirm it. A wrong path in repos.yml would otherwise
         # report one repo's dirty files under another repo's name.
-        origin = origin_owner_name(path)
-        if origin is not None and (origin[0].lower(), origin[1].lower()) != (
-            owner.lower(),
-            repo_name.lower(),
-        ):
+        actual = origin_full_name(path)
+        if actual is not None and actual.lower() != key.lower():
             log.warning(
-                "%s is a checkout of %s/%s, not %s - check repos.yml",
+                "%s is a checkout of %s, not %s - check repos.yml",
                 path,
-                origin[0],
-                origin[1],
+                actual,
                 key,
             )
             continue

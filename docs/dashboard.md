@@ -11,10 +11,11 @@ keywords: grafana dashboard, promql, panel json, alert rules, state timeline, gr
 Every tile except *Repos monitored* links to a table listing exactly what is
 behind that number — collapsed under *Drill-down* at the bottom, opened full
 screen by the click. Each drill-down's row count is the tile's value by
-construction, and each repo name links to GitHub.
+construction, and each repo name links to that repo on its own forge — the URL
+comes from the API that reported it, so a GitLab row opens GitLab.
 
 The tiles are laid out in two rows because that is how the data splits. The top
-row is what **GitHub** says about the repos — a headline count, the two workload
+row is what **the forge** says about the repos — a headline count, the two workload
 counts (open PRs, open issues), then the three problem counts. The bottom row is
 what **this machine** says about the clones: not in sync, dirty, off default
 branch. A green top row with an amber bottom row means the fleet is healthy and

@@ -59,6 +59,7 @@ working-copy panels once the first scan of the mount completes.
 | `-v "$HOME:/host:ro"` | Your home directory, read-only, so `~/...` in `repos.yml` resolves. Leave it out and the working-copy panels stay empty; everything the GitHub half reports still works. |
 | `-v jq-fleet-data:/data` | Prometheus history and Grafana's database. Leave it out and both start empty at every run. |
 | `-e GITHUB_TOKEN=...` | Needs `repo` and `read:org`. Without one GitHub allows 60 calls an hour, which is not a fleet. |
+| `-e GITLAB_TOKEN=...` | Only if the fleet has a GitLab repo in it. Needs `read_api`. |
 
 !!! warning "Publish the ports to `127.0.0.1` only"
 

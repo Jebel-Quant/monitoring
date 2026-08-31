@@ -26,7 +26,7 @@ from jq_collector.localgit import (
     _line_counts,
     _tags_mtime,
     _template_ref,
-    origin_owner_name,
+    origin_full_name,
 )
 
 # -- _git: the wrapper every other call goes through ------------------------
@@ -61,25 +61,29 @@ def test_a_nonzero_exit_is_a_none(tmp_path):
     assert _git(str(tmp_path), "rev-parse", "HEAD") is None
 
 
-# -- origin_owner_name: every URL shape a remote can carry ------------------
+# -- origin_full_name: reading a real checkout's remote ----------------------
+#
+# The URL grammar itself is `origin.parse`, and test_origin.py drives every
+# shape it accepts. What is left here is the part that needs a checkout on disk:
+# that the remote is actually read, and that the states with no usable answer
+# degrade to None rather than raising.
 
 
 @pytest.mark.parametrize(
     ("url", "expected"),
     [
-        ("git@github.com:o/r.git", ("o", "r")),
-        ("git@github.com:o/r", ("o", "r")),
-        ("https://github.com/o/r.git", ("o", "r")),
-        ("ssh://git@github.com/o/r", ("o", "r")),
+        ("git@github.com:o/r.git", "o/r"),
+        ("https://github.com/o/r.git", "o/r"),
+        # A GitLab subgroup: the whole namespace, not the last two segments.
+        ("https://gitlab.com/acme/platform/infra/web", "acme/platform/infra/web"),
         # A path remote, which is what a local clone-of-a-clone has.
-        ("/srv/mirrors/o/r", ("o", "r")),
-        ("relative/o/r", ("o", "r")),
+        ("/srv/mirrors/o/r", "o/r"),
     ],
 )
-def test_owner_and_name_are_read_from_any_remote_shape(tmp_path, url, expected):
+def test_the_full_name_is_read_from_the_remote(tmp_path, url, expected):
     path = make_checkout(tmp_path, "x", "y", origin=url)
 
-    assert origin_owner_name(str(path)) == expected
+    assert origin_full_name(str(path)) == expected
 
 
 def test_a_checkout_with_no_origin_has_no_identity(tmp_path):
@@ -88,14 +92,14 @@ def test_a_checkout_with_no_origin_has_no_identity(tmp_path):
     path.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main", str(path)], check=True)
 
-    assert origin_owner_name(str(path)) is None
+    assert origin_full_name(str(path)) is None
 
 
 def test_a_remote_too_short_to_name_a_repo_is_refused(tmp_path):
-    """`owner/name` needs two segments; one cannot be split into a repo id."""
+    """`namespace/name` needs two segments; one cannot be split into a repo id."""
     path = make_checkout(tmp_path, "x", "y", origin="https://example.com/lonely")
 
-    assert origin_owner_name(str(path)) is None
+    assert origin_full_name(str(path)) is None
 
 
 # -- the template pointer ---------------------------------------------------

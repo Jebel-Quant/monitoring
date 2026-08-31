@@ -17,6 +17,9 @@ services:
     restart: unless-stopped
     environment:
       GITHUB_TOKEN: ${GITHUB_TOKEN:?set GITHUB_TOKEN, e.g. export GITHUB_TOKEN=$(gh auth token)}
+      # Optional, and only wanted if repos.yml lists a `forge: gitlab` entry.
+      # Unset is fine: public gitlab.com projects are readable without one.
+      GITLAB_TOKEN: ${GITLAB_TOKEN:-}
       JQ_TEMPLATE_REPO: ${JQ_TEMPLATE_REPO:-Jebel-Quant/rhiza}
       JQ_GITHUB_INTERVAL: ${JQ_GITHUB_INTERVAL:-600}
       JQ_LOCAL_INTERVAL: ${JQ_LOCAL_INTERVAL:-60}

@@ -153,3 +153,94 @@ def test_is_ignored_accepts_a_bare_name_or_owner_slash_name(monkeypatch, owner, 
     monkeypatch.setenv("JQ_IGNORE", "bare,o/full")
 
     assert Config().is_ignored(owner, name) is ignored
+
+
+# -- which forge each repo is read through -----------------------------------
+
+
+def test_an_unlisted_repo_is_github(monkeypatch):
+    """What keeps a fleet that predates GitLab support working untouched."""
+    cfg = Config()
+    object.__setattr__(cfg, "repos", ("o/r",))
+    object.__setattr__(cfg, "forges", {})
+
+    assert cfg.forge_for("o/r") == "github"
+
+
+def test_the_fleet_groups_by_forge(monkeypatch):
+    """Each API is asked only for its own share; asking GitHub about a GitLab
+    repo answers 404 and logs it as unreadable."""
+    cfg = Config()
+    object.__setattr__(cfg, "repos", ("o/gh", "acme/platform/web", "o/gh2"))
+    object.__setattr__(cfg, "forges", {"acme/platform/web": "gitlab"})
+
+    assert cfg.repos_by_forge() == {
+        "github": ("o/gh", "o/gh2"),
+        "gitlab": ("acme/platform/web",),
+    }
+
+
+def test_a_github_only_fleet_lists_no_gitlab_at_all(monkeypatch):
+    """Absence, not an empty tuple: it is what stops a GitHub-only deployment
+    building a GitLab client or warning about a token it has no use for."""
+    cfg = Config()
+    object.__setattr__(cfg, "repos", ("o/r",))
+    object.__setattr__(cfg, "forges", {})
+
+    assert "gitlab" not in cfg.repos_by_forge()
+
+
+def test_forges_can_be_set_from_the_environment(monkeypatch):
+    """For a deployment with no repos.yml to mount - a server, or CI."""
+    monkeypatch.setenv("JQ_REPO_FORGES", "acme/web=gitlab, o/r=github")
+
+    assert Config().forges == {"acme/web": "gitlab", "o/r": "github"}
+
+
+@pytest.mark.parametrize("raw", ["acme/web", "acme/web=", "=gitlab"])
+def test_a_malformed_forge_pair_refuses_to_start(monkeypatch, raw):
+    monkeypatch.setenv("JQ_REPO_FORGES", raw)
+
+    with pytest.raises(ValueError, match="owner/name=forge"):
+        Config()
+
+
+def test_an_unknown_forge_in_the_environment_refuses_to_start(monkeypatch):
+    monkeypatch.setenv("JQ_REPO_FORGES", "acme/web=gitea")
+
+    with pytest.raises(ValueError, match="not one of"):
+        Config()
+
+
+def test_the_gitlab_api_defaults_to_gitlab_com(monkeypatch):
+    monkeypatch.delenv("GITLAB_API", raising=False)
+
+    assert Config().gitlab_api == "https://gitlab.com/api/v4"
+
+
+def test_a_github_only_fleet_logs_exactly_what_it_always_did(tmp_path, caplog):
+    """CI greps this line, and so does anybody reading the logs. Adding a clause
+    to it would have broken both for a fleet that has not changed."""
+    source = tmp_path / "repos.yml"
+    source.write_text("repos:\n  - repo: o/r\n  - repo: o/r2\n")
+
+    with caplog.at_level("INFO"):
+        cfg = Config()
+        object.__setattr__(cfg, "repos_file", str(source))
+        cfg.__post_init__()
+
+    assert "fleet: 2 repos, 0 with a checkout" in caplog.text
+    assert "forges:" not in caplog.text
+
+
+def test_a_mixed_fleet_says_which_forge_each_repo_is_on(tmp_path, caplog):
+    source = tmp_path / "repos.yml"
+    source.write_text("repos:\n  - repo: o/r\n  - repo: acme/web\n    forge: gitlab\n")
+
+    with caplog.at_level("INFO"):
+        cfg = Config()
+        object.__setattr__(cfg, "repos_file", str(source))
+        cfg.__post_init__()
+
+    assert "fleet: 2 repos, 0 with a checkout" in caplog.text
+    assert "forges: 1 on github, 1 on gitlab" in caplog.text

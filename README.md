@@ -22,11 +22,17 @@ repos:
   - path: ~/repos/jebel-quant/rhiza     # a checkout on this machine
   - path: ~/repos/cvxgrp/cvxsimulator
   - repo: Jebel-Quant/actions           # monitored, but not cloned here
+  - repo: acme/platform/infra/web       # GitLab, on the same board
+    forge: gitlab
 ```
 
-`owner/name` comes from each checkout's `origin`, so the path is all you write,
-and the path is used as written — a checkout does not have to live at
-`<root>/<owner>/<name>`. Then:
+`namespace/name` comes from each checkout's `origin`, so the path is all you
+write, and the path is used as written — a checkout does not have to live at
+`<root>/<owner>/<name>`. **GitHub and GitLab repos share one board**; the forge
+is read off the origin's host where there is a checkout, and stated with
+`forge: gitlab` where there is not — see
+[Configuration](docs/configuration.md#github-and-gitlab-in-the-same-fleet).
+Then:
 
 ```bash
 docker run -d --name jq-fleet \
@@ -52,6 +58,7 @@ there is nothing to clone and nothing on your disk but `repos.yml`.
 | `-v "$HOME:/host:ro"` | Your home directory, read-only, so `~/...` in `repos.yml` resolves. Leave it out and the working-copy panels stay empty; everything GitHub reports still works |
 | `-v jq-fleet-data:/data` | Prometheus history and Grafana's database. Leave it out and both start empty at every run |
 | `-e GITHUB_TOKEN=...` | Needs `repo` and `read:org`, and must read every repo you listed. Without one GitHub allows 60 calls an hour, which is not a fleet |
+| `-e GITLAB_TOKEN=...` | Only if the fleet has a GitLab repo in it. Needs `read_api` |
 
 `docker compose up -d` does the same thing with the flags written down; see
 [`docker-compose.yml`](docker-compose.yml).

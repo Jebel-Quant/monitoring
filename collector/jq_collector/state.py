@@ -47,15 +47,35 @@ class MergedPull:
 
 @dataclass(frozen=True)
 class RemoteRepo:
-    """What GitHub says about a repo."""
+    """What the forge says about a repo.
+
+    Nothing in this shape is GitHub-specific, which is why adding GitLab needed
+    a second collector rather than a second record: both forges answer the same
+    questions, in different words, at different URLs.
+    """
 
     name: str
     owner: str = ""
+    # Which forge answered. GitHub by default, so a snapshot built before this
+    # field existed reads correctly.
+    forge: str = "github"
     default_branch: str = "main"
     visibility: str = "unknown"
     archived: bool = False
     head_sha: str = ""
     pushed_at: float = 0.0
+
+    # The repo's page, as the forge itself reported it. The dashboard used to
+    # rebuild these by pasting the repo label onto `https://github.com/`, which
+    # no longer works once a repo can live somewhere else - and never needed to,
+    # since every API hands the URL over.
+    url: str = ""
+
+    # The repo's pull-request listing. Built rather than reported, because no
+    # API hands this one over - and built here, in the collector that already
+    # knows the forge, rather than in a dashboard that would have to learn that
+    # GitHub spells it /pulls and GitLab /-/merge_requests.
+    pulls_url: str = ""
 
     # Default-branch protection. None means "GitHub would not tell us" - the
     # protection endpoint needs admin on the repo, and a token without it gets
