@@ -44,6 +44,12 @@ jobs:
 
       - id: meta
         uses: docker/metadata-action@v5
+        # ghcr.io reads a multi-arch package's description off the manifest
+        # index, not off the per-platform image configs where --label lands, so
+        # the labels alone leave the package page blank. Ask for index-level
+        # annotations as well and pass both below.
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index,manifest
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -58,5 +64,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
