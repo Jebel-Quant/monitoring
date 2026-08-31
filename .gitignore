@@ -11,6 +11,10 @@ repos.yml
 .pytest_cache/
 _tests/
 __pycache__/
+.coverage
+
+# Written by the collector when it runs on this machine.
+.collector-logs/
 
 # The built book; CI publishes it, nothing commits it.
 _book/
