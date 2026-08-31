@@ -17,6 +17,16 @@ FROM grafana/grafana:11.3.1-ubuntu AS grafana
 
 FROM python:3.12-slim-bookworm
 
+# ghcr.io reads the package page's description from these, and shows a "add
+# LABEL org.opencontainers.image.description" hint until they exist. CI passes
+# the same keys as --label from the repo metadata, which wins over these; they
+# are here so a plain `docker build` produces a labelled image too.
+LABEL org.opencontainers.image.title="Fleet monitoring" \
+      org.opencontainers.image.description="Grafana + Prometheus board for a repo fleet: template drift, CI on the default branch, open pull requests, and your local working copies." \
+      org.opencontainers.image.source="https://github.com/Jebel-Quant/monitoring" \
+      org.opencontainers.image.url="https://jebel-quant.github.io/monitoring/" \
+      org.opencontainers.image.licenses="MIT"
+
 # git for the working-copy half, curl for the healthcheck and purge-repo,
 # ca-certificates for api.github.com.
 RUN apt-get update \
