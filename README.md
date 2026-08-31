@@ -13,6 +13,13 @@ with Prometheus keeping the history and six alert rules on top.
 One container, one file. Nothing is discovered: a repo is on the board because
 you listed it in `repos.yml`, and for no other reason.
 
+![The fleet board: tiles counting repos monitored, open PRs and issues, CI red on main, PRs with red checks, local clones out of sync, dirty working copies, branch protection and Dependabot, above a seven-day trend of open problems by kind.](dashboard.png)
+
+The top tiles are what the forge says about the repos, the next row is what this
+machine says about your clones, and every tile that counts something opens the
+table of exactly which repos are behind its number — see
+[the dashboard tour](docs/dashboard.md).
+
 ## Recipe
 
 Write a `repos.yml` — one entry per repo you want on the board:
@@ -55,9 +62,9 @@ there is nothing to clone and nothing on your disk but `repos.yml`.
 | | |
 |---|---|
 | `-v .../repos.yml:/config/repos.yml:ro` | Required. The fleet — [details](docs/configuration.md) |
-| `-v "$HOME:/host:ro"` | Your home directory, read-only, so `~/...` in `repos.yml` resolves. Leave it out and the working-copy panels stay empty; everything GitHub reports still works |
+| `-v "$HOME:/host:ro"` | Your home directory, read-only, so `~/...` in `repos.yml` resolves. Leave it out and the working-copy panels stay empty; everything the forge reports still works |
 | `-v jq-fleet-data:/data` | Prometheus history and Grafana's database. Leave it out and both start empty at every run |
-| `-e GITHUB_TOKEN=...` | Needs `repo` and `read:org`, and must read every repo you listed. Without one GitHub allows 60 calls an hour, which is not a fleet |
+| `-e GITHUB_TOKEN=...` | Needs `repo` and `read:org`, and must read every GitHub repo you listed. Without one GitHub allows 60 calls an hour, which is not a fleet |
 | `-e GITLAB_TOKEN=...` | Only if the fleet has a GitLab repo in it. Needs `read_api` |
 
 `docker compose up -d` does the same thing with the flags written down; see
