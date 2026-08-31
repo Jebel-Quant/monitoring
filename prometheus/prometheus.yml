@@ -9,13 +9,12 @@ global:
 
 scrape_configs:
   - job_name: jq-collector
-    # The collector runs on the host, not in this stack - it reads your working
-    # copies at their real paths, which a bind mount cannot express and which
-    # is far faster than one anyway. host.docker.internal is how a container
-    # reaches the machine it runs on; docker-compose.yml maps it on Linux,
-    # where it is not built in.
+    # Same container, so this is a loopback scrape. It used to be
+    # host.docker.internal: the collector ran on your machine because it reads
+    # your working copies and a per-repo bind mount could not name a checkout
+    # at an arbitrary path. One whole-home mount can, so it moved back in.
     static_configs:
-      - targets: ["host.docker.internal:9109"]
+      - targets: ["localhost:9109"]
     relabel_configs:
       # There is exactly one collector, so `instance` carries no information -
       # only where the process happened to be running. Left alone it is the

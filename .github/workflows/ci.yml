@@ -81,43 +81,71 @@ jobs:
       - name: Panel ids, link targets and grid overlaps
         run: python3 scripts/check-dashboard.py
 
-  compose:
-    name: compose and scripts
+  image:
+    name: image builds and comes up
     runs-on: ubuntu-latest
-    # GITHUB_TOKEN is a required variable in the compose file; any value
-    # satisfies interpolation.
-    env:
-      GITHUB_TOKEN: dummy-value-for-interpolation-only
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compose files parse
-        run: |
-          docker compose -f docker-compose.yml config --quiet
-          docker compose -f docker-compose.yml -f docker-compose.admin.yml config --quiet
+      - name: Build
+        run: docker build -t jq-monitoring:ci .
 
-      # The collector runs on the host now, so these are the entry points a
-      # user actually touches. A syntax error in one of them used to be caught
-      # by nothing at all.
+      # The entry points a user actually touches. A syntax error in either used
+      # to be caught by nothing at all - and now they are the container's PID 1
+      # and its only maintenance command, so a broken one is a board that does
+      # not start.
       - name: Shell scripts parse
-        run: for f in scripts/*.sh; do bash -n "$f"; done
+        run: for f in image/*.sh; do bash -n "$f"; done
 
-      # repos.yml is gitignored, so CI builds one the way a new user would and
-      # proves gen-repos.py emits the two lines the collector reads - including
-      # for a checkout that does NOT sit at <root>/<owner>/<name>, which is the
-      # case the paths line exists for. Nothing else in CI reads repos.yml, so
-      # a malformed one would otherwise only surface on somebody's laptop.
-      - name: The fleet resolves to an environment
+      - name: Compose file parses
+        env:
+          GITHUB_TOKEN: dummy-value-for-interpolation-only
+        run: docker compose -f docker-compose.yml config --quiet
+
+      # repos.yml is gitignored, so CI writes one the way a new user would.
+      # This is the whole install path in one step: a checkout that does NOT sit
+      # at <root>/<owner>/<name> - the case the paths in repos.yml exist for -
+      # plus a repo with no checkout at all, and the board has to come up
+      # serving metrics for both. Nothing else in CI reads repos.yml, so a
+      # regression here would otherwise only surface on somebody's laptop.
+      - name: It comes up and serves the fleet
         run: |
-          pip install --quiet pyyaml
-          printf 'repos:\n' > repos.yml
-          git init -q -b main nested/somewhere/rhiza
-          git -C nested/somewhere/rhiza remote add origin https://github.com/Jebel-Quant/rhiza.git
-          printf '  - path: nested/somewhere/rhiza\n' >> repos.yml
-          # A repo with no checkout: GitHub panels only, no path.
-          printf '  - repo: Jebel-Quant/actions\n' >> repos.yml
+          mkdir -p home/nested/somewhere
+          git init -q -b main home/nested/somewhere/rhiza
+          git -C home/nested/somewhere/rhiza remote add origin \
+            https://github.com/Jebel-Quant/rhiza.git
+          cat > repos.yml <<'YML'
+          repos:
+            - path: ~/nested/somewhere/rhiza
+            - repo: Jebel-Quant/actions
+          YML
 
-          python3 scripts/gen-repos.py | tee env.out
-          grep -qx 'JQ_REPOS=Jebel-Quant/rhiza,Jebel-Quant/actions' env.out
-          grep -q 'JQ_REPO_PATHS=Jebel-Quant/rhiza=.*/nested/somewhere/rhiza$' env.out
-          test "$(grep -c 'Jebel-Quant/actions=' env.out)" = 0
+          # No GITHUB_TOKEN: the GitHub half is then rate-limited to 60 calls an
+          # hour and will mostly fail, which is fine - this asserts the fleet
+          # resolved and the exporter is serving, not that GitHub answered.
+          docker run -d --name fleet \
+            -p 127.0.0.1:9109:9109 \
+            -v "$PWD/repos.yml:/config/repos.yml:ro" \
+            -v "$PWD/home:/host:ro" \
+            jq-monitoring:ci
+
+          for _ in $(seq 1 60); do
+            curl -fsS http://localhost:9109/metrics -o metrics.txt && break
+            docker ps -q -f name=fleet | grep -q . || { docker logs fleet; exit 1; }
+            sleep 5
+          done
+
+          docker logs fleet
+          # Both repos on the board, and the awkward path found: `cloned` is 1
+          # only if the collector reached the checkout through the /host mount.
+          grep -q 'jq_repo_cloned{repo="Jebel-Quant/rhiza"} 1.0' metrics.txt
+          grep -q 'repo="Jebel-Quant/actions"' metrics.txt
+
+      # A refusal at startup, not a board that is quietly one repo short. This
+      # is the failure mode the whole config path is shaped to avoid.
+      - name: A broken repos.yml stops the container
+        run: |
+          printf 'repos:\n  - repo: no-slash\n' > broken.yml
+          docker run --rm -v "$PWD/broken.yml:/config/repos.yml:ro" \
+            jq-monitoring:ci 2>&1 | tee out.txt || true
+          grep -q 'no-slash' out.txt

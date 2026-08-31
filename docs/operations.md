@@ -6,55 +6,111 @@ keywords: grafana login, no data, prometheus staleness, macos sleep, caffeinate
 
 # Running it day to day
 
-## The collector runs on your machine
+## One container, three processes
 
-Two halves, not three containers. Prometheus and Grafana are in Docker;
-**the collector is an ordinary process on your Mac**, started by `up.sh` as a
-launchd agent and stopped by `down.sh`.
-
-It is not containerised because it reads your working copies, and a container
-can only reach those through bind mounts. Those mounts have to place every
-checkout at `<root>/<owner>/<name>`, which silently loses any repo that lives
-somewhere else, and reading thousands of small files back through them on macOS
-is slow enough that the line counts needed a cache to stay affordable. On the
-host both problems disappear.
+Prometheus, Grafana and the collector share a container, and `docker logs -f
+jq-fleet` shows all three with a prefix telling you which is talking.
 
 | | |
 |---|---|
-| Its log | `.collector-logs/collector.log` |
-| Restart it | `launchctl kickstart -k gui/$UID/com.jebel-quant.jq-collector` |
-| Run it in the foreground instead | `./scripts/collector.sh` (Ctrl-C stops it) |
-| Is Prometheus reaching it? | <http://localhost:9090/targets> — the `jq-collector` job |
+| What it is doing | `docker logs -f jq-fleet` |
+| Restart it | `docker restart jq-fleet` — also how you pick up an edited `repos.yml` |
+| Is Prometheus reaching the collector? | <http://localhost:9090/targets> — the `jq-collector` job (needs `-p 127.0.0.1:9090:9090`) |
+| Raw metrics | <http://localhost:9109/metrics> (needs `-p 127.0.0.1:9109:9109`) |
 
-Prometheus scrapes it at `host.docker.internal:9109`, which is how a container
-reaches the machine it runs on.
+Nothing here restarts a dead process. The three are one board — a dead
+collector means empty panels, a dead Prometheus means no history — so any of
+them exiting takes the container down and Docker's own `--restart` policy
+handles it. That keeps `docker ps` honest about whether the board is up, which
+a supervisor quietly restarting one process inside a still-healthy container
+would not.
 
-**The trade.** Inside the container the collector could only see the checkouts
-mounted into it, so an unlisted repo was not merely filtered out — it was
-invisible. It now runs as you and could read anything you can. It still never
-writes: every git call is read-only and passes `--no-optional-locks`. But that
-is now a property of the code rather than something the sandbox enforces.
+### How the working copies get in
 
-**If it will not start**, the usual cause is `PATH`. A launchd agent inherits
-`/usr/bin:/bin:/usr/sbin:/sbin` and nothing else, so a `uv` under
-`/opt/homebrew` or `~/.local` is invisible to it. `up.sh` pins `uv`'s directory
-into the plist when it installs the agent, so re-running `./scripts/up.sh`
-after moving or reinstalling `uv` is the fix.
+They used to keep the collector out of Docker entirely. A bind mount had to
+place every checkout at `/repos/<owner>/<name>`, which silently lost any repo
+living somewhere else — and four repos in the fleet this was built against are
+laid out that way. So the collector ran on the host as a launchd agent, and
+Prometheus scraped it at `host.docker.internal:9109`.
 
+The fix was to stop mounting repos one at a time. `-v "$HOME:/host:ro"` mounts
+the home directory once, whole, and `~/...` in `repos.yml` is read relative to
+that mount — so `~/repos/tschm/rhiza_projects/cs` means exactly what it says.
+One mount expresses any layout, and the collector came back inside.
+
+**The trade.** The collector can now see everything under your home directory,
+not only the checkouts you listed — the mount is the same width either way.
+It still never writes: every git call is read-only and passes
+`--no-optional-locks`, and the mount is `:ro` so the kernel enforces it too.
+Leave the mount off entirely and the GitHub half still works; the working-copy
+panels simply stay empty.
+
+**The first scan is slow.** Reading through a Docker Desktop bind mount is cold
+the first time — on a 24-repo fleet the opening pass took about two minutes,
+and about three milliseconds per git call once the mount was warm. This is also
+why line counts are cached against a fingerprint of the clone rather than
+retaken every minute (see [Size and cadence](dashboard.md#size-and-cadence)).
+
+## Coming from the two-container stack
+
+The board used to be `jq-prometheus` and `jq-grafana` plus a launchd agent, with
+history in the `jq-monitoring_prometheus-data` and `jq-monitoring_grafana-data`
+volumes. Both carry over — Prometheus's `instance` label is pinned to
+`jq-collector` by a relabel rule (see `prometheus/prometheus.yml`) precisely so
+that moving the collector does not fork every series in two.
+
+Stop the old stack **cleanly** first. `docker stop` sends SIGTERM and Prometheus
+flushes its WAL on it; killing it instead loses whatever had not been compacted
+into a block yet.
+
+```bash
+launchctl bootout "gui/$UID/com.jebel-quant.jq-collector"   # macOS
+docker stop jq-prometheus jq-grafana
+
+docker volume create jq-fleet-data
+docker run --rm \
+  -v jq-monitoring_prometheus-data:/old-prom:ro \
+  -v jq-monitoring_grafana-data:/old-graf:ro \
+  -v jq-fleet-data:/data \
+  alpine sh -euc '
+    mkdir -p /data/prometheus /data/grafana
+    cd /old-prom; for f in *; do case "$f" in lock|queries.active) continue;; esac
+      cp -a "$f" /data/prometheus/; done
+    cd /old-graf; for f in *; do case "$f" in dashboards) continue;; esac
+      cp -a "$f" /data/grafana/; done'
+```
+
+Two paths change: the TSDB moves from `/prometheus` to `/data/prometheus` and
+Grafana's database from `/var/lib/grafana` to `/data/grafana`, which is why the
+copy is into subdirectories rather than into the volume root. `lock` and
+`queries.active` are runtime files Prometheus rebuilds, and `dashboards/` is an
+empty leftover from the old compose file bind-mounting over that path — the
+dashboards are in the image now.
+
+Then start the container [as in the recipe](index.md#the-recipe) with
+`-v jq-fleet-data:/data`. This is a copy, so the old volumes are untouched and
+rolling back is `docker start jq-prometheus jq-grafana`. Once you are satisfied:
+
+```bash
+docker rm jq-prometheus jq-grafana
+docker volume rm jq-monitoring_prometheus-data jq-monitoring_grafana-data
+rm -rf .collector-logs      # the launchd agent's log; nothing writes here now
+```
 
 ## The "Sign in" button
 
-Grafana's own local login, against a SQLite file in the `grafana-data` volume on
-this machine. There is one account, `admin` / `admin` (override in `.env`). No
+Grafana's own local login, against a SQLite file under `/data` on this
+machine. There is one account, `admin` / `admin` (override with
+`-e GF_SECURITY_ADMIN_PASSWORD=...`). No
 Grafana Cloud, no external account, nothing leaves the box. Anonymous access is
 enabled with the `Viewer` role, so the board opens without signing in; the
 dashboard is provisioned and read-only anyway, so you would only sign in to add
 a contact point or poke at settings.
 
-Because anonymous access is on, **all three ports bind to `127.0.0.1` only**.
-Published on `0.0.0.0` they would serve private repo names, PR titles and local
-branch names to anyone on the same network with no password. If you genuinely
-want that, drop the `127.0.0.1:` prefix in `docker-compose.yml`.
+Because anonymous access is on, **publish the ports to `127.0.0.1` only** —
+`-p 127.0.0.1:3000:3000`, as every example here does. A bare `-p 3000:3000`
+would serve private repo names, PR titles and local branch names to anyone on
+the same network with no password.
 
 ## "No data" usually means the Mac was asleep
 
@@ -78,6 +134,7 @@ was green during hours nobody observed. That is the same failure as the
 papering over them, keep the machine awake while the stack matters:
 
 ```bash
-caffeinate -s docker compose up -d    # or Energy Saver -> prevent sleeping
+caffeinate -s -w "$(docker inspect -f '{{.State.Pid}}' jq-fleet)"    # or
+                                     # Energy Saver -> prevent sleeping
 ```
 

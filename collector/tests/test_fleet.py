@@ -13,15 +13,13 @@ refused rather than reported under the listed repo's name.
 from __future__ import annotations
 
 import dataclasses
-import importlib.util
 import os
 import pathlib
 import subprocess
-import sys
 
 import pytest
 
-from jq_collector import localgit
+from jq_collector import localgit, repos
 from jq_collector.config import Config
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -375,108 +373,230 @@ def test_an_unreadable_repo_does_not_lose_the_others(make_client, cfg, caplog):
     assert "Jebel-Quant/typo" in caplog.text
 
 
-# -- the generator -----------------------------------------------------------
+# -- reading repos.yml -------------------------------------------------------
+#
+# One file, read at startup by the collector itself. It used to be turned into
+# two environment lines by a script the launcher ran, which meant three places
+# a repo could be lost between the file and the board.
 
 
-@pytest.fixture
-def gen_repos():
-    """scripts/gen-repos.py, loaded by path - it is a script, not a package."""
-    pytest.importorskip("yaml")
-    spec = importlib.util.spec_from_file_location(
-        "gen_repos", REPO_ROOT / "scripts" / "gen-repos.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def write_fleet(tmp_path: pathlib.Path, body: str) -> str:
+    source = tmp_path / "repos.yml"
+    source.write_text(f"repos:\n{body}")
+    return str(source)
 
 
-def test_the_generator_names_a_checkout_from_its_origin(gen_repos, tmp_path):
+def test_a_checkout_is_named_by_its_origin(tmp_path):
     path = make_checkout(tmp_path, "cvxgrp", "cvxsimulator")
 
-    assert gen_repos.resolve({"path": str(path)}, 1) == ("cvxgrp/cvxsimulator", path)
+    fleet, paths = repos.load(write_fleet(tmp_path, f"  - path: {path}\n"))
+
+    assert fleet == ("cvxgrp/cvxsimulator",)
+    assert paths == {"cvxgrp/cvxsimulator": str(path)}
 
 
-def test_an_explicit_repo_overrides_the_origin(gen_repos, tmp_path):
+def test_an_explicit_repo_overrides_the_origin(tmp_path):
     """For a fork you want the board to follow upstream, not your copy."""
     path = make_checkout(tmp_path, "me", "cvxpy")
+    body = f"  - path: {path}\n    repo: cvxpy/cvxpy\n"
 
-    assert gen_repos.resolve({"path": str(path), "repo": "cvxpy/cvxpy"}, 1) == (
-        "cvxpy/cvxpy",
-        path,
+    assert repos.load(write_fleet(tmp_path, body)) == (
+        ("cvxpy/cvxpy",),
+        {"cvxpy/cvxpy": str(path)},
     )
 
 
-def test_an_entry_may_name_a_repo_with_no_checkout(gen_repos):
-    assert gen_repos.resolve({"repo": "Jebel-Quant/actions"}, 1) == ("Jebel-Quant/actions", None)
+def test_an_entry_may_name_a_repo_with_no_checkout(tmp_path):
+    fleet, paths = repos.load(write_fleet(tmp_path, "  - repo: Jebel-Quant/actions\n"))
+
+    assert fleet == ("Jebel-Quant/actions",)
+    assert paths == {}
 
 
-def test_a_bare_string_entry_is_a_path(gen_repos, tmp_path):
+def test_a_bare_string_entry_is_a_path(tmp_path):
     path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
 
-    assert gen_repos.resolve(str(path), 1) == ("Jebel-Quant/rhiza", path)
+    assert repos.load(write_fleet(tmp_path, f"  - {path}\n"))[0] == ("Jebel-Quant/rhiza",)
+
+
+def test_a_named_repo_whose_checkout_is_missing_keeps_its_github_panels(tmp_path, caplog):
+    """The supported way to run without mounting a home directory.
+
+    An unreachable path is not an error - the mount may simply not be there -
+    but it must be said out loud, because a typo in repos.yml looks identical
+    from in here and would otherwise silently empty half a repo's row.
+    """
+    body = "  - path: ~/nowhere/rhiza\n    repo: Jebel-Quant/rhiza\n"
+
+    with caplog.at_level("WARNING"):
+        fleet, paths = repos.load(write_fleet(tmp_path, body))
+
+    assert fleet == ("Jebel-Quant/rhiza",)
+    assert paths == {}
+    assert "no checkout for Jebel-Quant/rhiza" in caplog.text
 
 
 @pytest.mark.parametrize(
-    "entry",
+    "body",
     [
-        {"repo": "no-slash"},  # not owner/name, and no path to derive it from
-        {},  # neither
-        {"path": "/definitely/not/here"},
+        "  - repo: no-slash\n",  # not owner/name, and no path to derive it from
+        "  - {}\n",  # neither
+        "  - path: /definitely/not/here\n",  # unreachable, and nothing to fall back on
+        "  - 42\n",  # not a path and not a mapping
     ],
 )
-def test_a_broken_entry_fails_loudly(gen_repos, entry):
-    """Better a refusal at generate time than a board that is quietly short a repo."""
-    with pytest.raises(SystemExit):
-        gen_repos.resolve(entry, 1)
+def test_a_broken_entry_refuses_to_start(tmp_path, body):
+    """Better a refusal at startup than a board that is quietly short a repo."""
+    with pytest.raises(repos.FleetError):
+        repos.load(write_fleet(tmp_path, body))
 
 
-def test_a_directory_that_is_not_a_checkout_fails(gen_repos, tmp_path):
+def test_a_directory_that_is_not_a_checkout_is_refused(tmp_path):
     (tmp_path / "empty").mkdir()
-    with pytest.raises(SystemExit):
-        gen_repos.resolve({"path": str(tmp_path / "empty")}, 1)
+    with pytest.raises(repos.FleetError):
+        repos.load(write_fleet(tmp_path, f"  - path: {tmp_path / 'empty'}\n"))
 
 
-def test_it_prints_the_fleet_and_the_paths_and_writes_nothing(
-    gen_repos, tmp_path, monkeypatch, capsys
-):
-    """Both lines must come from repos.yml, not from anyone's memory.
+def test_the_same_repo_twice_is_refused(tmp_path):
+    """Two entries, one row on the board: the second would silently win."""
+    body = "  - repo: a/b\n  - repo: a/b\n"
+    with pytest.raises(repos.FleetError):
+        repos.load(write_fleet(tmp_path, body))
 
-    Retyping either is how they drift: a repo added here never reaches the
-    board and nothing reports the difference. The paths line is what lets the
-    collector find a checkout that does not sit at <root>/<owner>/<name>, and a
-    repo with no checkout must not appear in it at all. Nothing is written to
-    disk - scripts/collector.sh runs this at every launch and exports the
-    result, so there is no generated file in between to go stale.
-    """
+
+@pytest.mark.parametrize(
+    "body",
+    ["  - repo: [\n", ""],  # unparseable, and no `repos:` list at all
+)
+def test_an_unusable_file_refuses_to_start(tmp_path, body):
+    source = tmp_path / "repos.yml"
+    source.write_text(body)
+    with pytest.raises(repos.FleetError):
+        repos.load(str(source))
+
+
+def test_a_missing_file_refuses_to_start(tmp_path):
+    with pytest.raises(repos.FleetError):
+        repos.load(str(tmp_path / "absent.yml"))
+
+
+# -- host paths --------------------------------------------------------------
+#
+# In the container the home directory is one read-only mount, and repos.yml is
+# written against the host's view of it. This is the whole translation, and it
+# is the reason a checkout at any path can be named at all - the per-repo bind
+# mounts it replaced could only express <root>/<owner>/<name>.
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("~/repos/rhiza", "/host/repos/rhiza"),
+        ("~", "/host"),
+        ("repos/rhiza", "/host/repos/rhiza"),  # relative: also relative to home
+        ("/nowhere/rhiza", "/host/nowhere/rhiza"),  # absolute, and not on this fs
+    ],
+)
+def test_a_path_is_read_through_the_host_mount(raw, expected):
+    assert repos.resolve_path(raw, "/host") == expected
+
+
+def test_an_absolute_path_that_exists_is_taken_as_written(tmp_path):
+    """The collector running natively, where there is no mount to look under."""
+    assert repos.resolve_path(str(tmp_path), "/host") == str(tmp_path)
+
+
+def test_without_a_mount_a_path_is_just_a_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    assert repos.resolve_path("~/repos/rhiza", "") == str(tmp_path / "repos" / "rhiza")
+
+
+# -- and how Config folds it in ----------------------------------------------
+
+
+def test_config_reads_the_fleet_out_of_the_file(tmp_path, monkeypatch):
     path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
-    source = tmp_path / "repos.yml"
-    source.write_text(f"repos:\n  - path: {path}\n  - repo: cvxgrp/cvxsimulator\n")
-    monkeypatch.setattr(gen_repos, "SOURCE", source)
-    monkeypatch.setattr(sys, "argv", ["gen-repos.py"])
+    source = write_fleet(tmp_path, f"  - path: {path}\n  - repo: cvxgrp/cvxsimulator\n")
+    monkeypatch.setenv("JQ_REPOS_FILE", source)
 
-    gen_repos.main()
+    cfg = Config(repos_file=source)
 
-    assert capsys.readouterr().out.strip().splitlines() == [
-        "JQ_REPOS=Jebel-Quant/rhiza,cvxgrp/cvxsimulator",
-        f"JQ_REPO_PATHS=Jebel-Quant/rhiza={path}",
-    ]
-    assert list(tmp_path.glob("docker-compose*")) == []
+    assert cfg.repos == ("Jebel-Quant/rhiza", "cvxgrp/cvxsimulator")
+    assert cfg.repo_paths == {"Jebel-Quant/rhiza": str(path)}
 
 
-def test_it_refuses_a_path_it_cannot_express(gen_repos, tmp_path, monkeypatch, capsys):
-    """A comma is the separator, so a path holding one would read as two repos."""
-    path = make_checkout(tmp_path, "Jebel-Quant", "rhi,za")
-    source = tmp_path / "repos.yml"
-    source.write_text(f"repos:\n  - path: {path}\n")
-    monkeypatch.setattr(gen_repos, "SOURCE", source)
-    monkeypatch.setattr(sys, "argv", ["gen-repos.py"])
+def test_an_explicit_path_in_the_environment_beats_the_file(tmp_path):
+    """The escape hatch: one awkward path corrected without editing the file."""
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    source = write_fleet(tmp_path, f"  - path: {path}\n")
+
+    cfg = Config(repos_file=source, repo_paths={"Jebel-Quant/rhiza": "/elsewhere"})
+
+    assert cfg.repo_paths == {"Jebel-Quant/rhiza": "/elsewhere"}
+
+
+def test_no_file_leaves_the_environment_in_charge(tmp_path, monkeypatch):
+    """A deployment with nothing to mount - a server, or CI."""
+    monkeypatch.setenv("JQ_REPOS", "a/b,c/d")
+
+    cfg = Config(repos_file=str(tmp_path / "absent.yml"))
+
+    assert cfg.repos == ("a/b", "c/d")
+
+
+def test_a_broken_file_stops_the_collector(tmp_path):
+    """SystemExit, not a short fleet: a board that came up missing repos and
+    said nothing is worse than one that did not come up."""
+    source = write_fleet(tmp_path, "  - repo: no-slash\n")
 
     with pytest.raises(SystemExit):
-        gen_repos.main()
-    assert "contains a comma" in capsys.readouterr().err
+        Config(repos_file=source)
 
 
-def test_an_unknown_flag_is_refused(gen_repos, monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["gen-repos.py", "--all"])
-    with pytest.raises(SystemExit):
-        gen_repos.main()
+# -- who a checkout says it is -----------------------------------------------
+#
+# The origin URL is the only thing that can name a checkout, and git writes it
+# in several shapes. Getting one wrong puts a repo on the board under the wrong
+# name, or drops it - neither of which the URL itself would ever hint at.
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "git@github.com:Jebel-Quant/rhiza.git",
+        "https://github.com/Jebel-Quant/rhiza.git",
+        "https://github.com/Jebel-Quant/rhiza",
+        "ssh://git@github.com/Jebel-Quant/rhiza.git",
+        "/srv/mirrors/Jebel-Quant/rhiza",  # a local clone of a local clone
+    ],
+)
+def test_every_shape_of_origin_url_names_the_same_repo(tmp_path, origin):
+    path = make_checkout(tmp_path, "somewhere", "else", origin=origin)
+
+    assert repos.load(write_fleet(tmp_path, f"  - path: {path}\n"))[0] == ("Jebel-Quant/rhiza",)
+
+
+@pytest.mark.parametrize("origin", ["rhiza", ""])
+def test_an_origin_that_names_no_owner_is_refused(tmp_path, origin):
+    """No owner means no `owner/name`, and guessing one would file the repo
+    under a name that does not exist on GitHub."""
+    path = make_checkout(tmp_path, "somewhere", "else")
+    if origin:
+        subprocess.run(["git", "-C", str(path), "remote", "set-url", "origin", origin], check=True)
+    else:
+        subprocess.run(["git", "-C", str(path), "remote", "remove", "origin"], check=True)
+
+    with pytest.raises(repos.FleetError, match="origin"):
+        repos.load(write_fleet(tmp_path, f"  - path: {path}\n"))
+
+
+def test_git_being_unrunnable_is_refused_not_guessed_at(tmp_path, monkeypatch):
+    """Same answer as a missing remote: the collector will not invent a name."""
+    path = make_checkout(tmp_path, "Jebel-Quant", "rhiza")
+    monkeypatch.setattr(
+        repos.subprocess, "run", lambda *_a, **_k: (_ for _ in ()).throw(OSError("no git"))
+    )
+
+    with pytest.raises(repos.FleetError, match="origin"):
+        repos.load(write_fleet(tmp_path, f"  - path: {path}\n"))

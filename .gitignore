@@ -2,13 +2,10 @@
 
 # Your fleet: it describes the folder layout of one machine, which has no
 # business in a public repo. Start from repos.example.yml. Nothing is generated
-# from it any more - scripts/collector.sh reads it at every launch.
+# from it - the collector reads it at startup, inside the container.
 repos.yml
 
-# Where the launchd agent's output goes.
-.collector-logs/
-
-# Left behind by running the collector, which is how it runs now.
+# Left behind by running the collector's tests locally.
 .venv/
 .ruff_cache/
 .pytest_cache/

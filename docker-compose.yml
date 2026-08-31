@@ -1,59 +1,46 @@
-# Prometheus and Grafana. The collector is NOT here: it runs on the host, via
-# scripts/collector.sh, because it reads your working copies and a container can
-# only see them through bind mounts - which cannot name a checkout that sits
-# somewhere other than <root>/<owner>/<name>, and which are slow enough on
-# macOS to have needed a caching layer to work around.
+# Optional. `docker run` is the documented way to start the board - see the
+# README - and this file is the same thing with the flags written down, for
+# when you would rather not retype them.
 #
-#   ./scripts/up.sh          starts both halves
-#   docker compose up -d     starts only this half
+#   docker compose up -d --build
+#
+# One service: Prometheus, Grafana and the collector share a container. See the
+# Dockerfile for why they are not three.
 
 name: jq-monitoring
 
 services:
-  prometheus:
-    image: prom/prometheus:v2.55.1
-    container_name: jq-prometheus
-    restart: unless-stopped
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=${PROM_RETENTION:-180d}
-      - --web.enable-lifecycle
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    ports:
-      - "127.0.0.1:9090:9090"
-    # Docker Desktop resolves host.docker.internal on its own; plain Docker on
-    # Linux does not, and without this the collector target is simply down.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  grafana:
-    image: grafana/grafana:11.3.1
-    container_name: jq-grafana
+  fleet:
+    build: .
+    image: ghcr.io/jebel-quant/monitoring:latest
+    container_name: jq-fleet
     restart: unless-stopped
     environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?set GITHUB_TOKEN, e.g. export GITHUB_TOKEN=$(gh auth token)}
+      JQ_TEMPLATE_REPO: ${JQ_TEMPLATE_REPO:-Jebel-Quant/rhiza}
+      JQ_GITHUB_INTERVAL: ${JQ_GITHUB_INTERVAL:-600}
+      JQ_LOCAL_INTERVAL: ${JQ_LOCAL_INTERVAL:-60}
+      JQ_IGNORE: ${JQ_IGNORE:-}
+      JQ_PUBLIC_ONLY: ${JQ_PUBLIC_ONLY:-false}
+      PROM_RETENTION: ${PROM_RETENTION:-180d}
       GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-admin}
-      # A single-user board on localhost; skip the login wall but keep the
-      # anonymous role read-only so a stray click cannot edit provisioning.
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_USERS_DEFAULT_THEME: dark
-      GF_FEATURE_TOGGLES_ENABLE: ""
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana-data:/var/lib/grafana
+      - ./repos.yml:/config/repos.yml:ro
+      # Your home directory, whole and read-only. One mount, because repos.yml
+      # names checkouts at whatever paths they actually have - see the
+      # Dockerfile. Drop this line and the working-copy panels stay empty;
+      # everything the GitHub half reports still works.
+      - ${HOME}:/host:ro
+      - fleet-data:/data
     ports:
-      # Loopback only: anonymous access is enabled, so a 0.0.0.0 binding would
+      # Loopback only: anonymous read access is on, so a 0.0.0.0 binding would
       # serve private repo names and PR titles to the whole LAN without a
       # password. Change to "3000:3000" only if you deliberately want that.
       - "127.0.0.1:3000:3000"
-    depends_on:
-      - prometheus
+      # Prometheus and the raw metrics, for when you are debugging a panel.
+      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:9109:9109"
 
 volumes:
-  prometheus-data:
-  grafana-data:
+  fleet-data:

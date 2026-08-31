@@ -5,7 +5,9 @@ datasources:
     uid: jq-prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    # Same container as Grafana; this was http://prometheus:9090 when
+    # Prometheus was a service of its own.
+    url: http://localhost:9090
     isDefault: true
     jsonData:
       timeInterval: 30s
