@@ -11,27 +11,82 @@ environment variables on the `docker run`.
 
 ## The fleet is an explicit list
 
-`repos.yml` names every monitored repo, one
-entry per checkout on this machine:
+`repos.yml` names every monitored repo — one entry per checkout on this
+machine, or one entry for a folder full of them:
 
 ```yaml
 repos:
   - path: ~/repos/jebel-quant/rhiza
-  - path: ~/repos/cvxgrp/cvxsimulator
-  - repo: Jebel-Quant/actions      # monitored, but not checked out here
+  - folder: ~/repos/cvxgrp          # every checkout directly inside it
+  - repo: Jebel-Quant/actions       # monitored, but not checked out here
 ```
 
 `owner/name` is read from each checkout's `origin` remote, so the path is all
-you write. Nothing is discovered: a repo is on the board because it is in this
-file, and for no other reason. The collector reads the file itself, at startup,
-from `/config/repos.yml` — nothing is generated from it, so there is no second
-file to fall out of step.
+you write. Nothing is discovered behind your back: a repo is on the board
+because this file names it, or names the folder it sits in, and for no other
+reason. The collector reads the file itself, at startup, from
+`/config/repos.yml` — nothing is generated from it, so there is no second file
+to fall out of step.
 
 This replaced a whole-org GitHub sweep plus a directory walk under one mounted
 root. Both decided membership on their own: a new repo in the org arrived
 unasked, a shared org like cvxgrp dragged in 100+ repos that were not yours, and
 any checkout that happened to sit under the root joined the board because its
-origin looked right.
+origin looked right. A `folder:` is not that walk back: it is one directory you
+wrote down, read one level deep, and the repos it holds are the repos you keep
+there.
+
+## A folder of repos
+
+Where you keep a whole org checked out, name the folder and every checkout in
+it is on the board:
+
+```yaml
+repos:
+  - folder: ~/repos/jebel-quant
+```
+
+Sixteen repos become one line, and the line cannot drift out of step with the
+disk the way sixteen can — clone a repo into the folder and it joins at the
+next `docker restart jq-fleet`, `rm -rf` one and it leaves. That is the trade:
+a folder is convenient exactly because you are no longer deciding repo by repo,
+so keep folders for the directories you want whole and list the repos
+one by one where you want only some of them.
+
+The rules, all of which exist so the board cannot go quietly short:
+
+- **One level, never deeper.** Only the folder's own children are looked at, so
+  `folder: ~/repos` finds nothing when your repos live in `~/repos/<org>/<name>`
+  — name the folders the checkouts are directly in. Recursing would make
+  `folder: ~` the whole-disk walk this file exists to have got rid of.
+- **A missing folder, or one with no checkouts in it, refuses to start.** You
+  asked for the repos in it and there are none; an unreachable `path` is refused
+  for the same reason.
+- **A directory that is not a checkout is passed over**, and so is a clone with
+  no `origin` remote to name it by — that is somebody's scratch clone, logged as
+  a warning and skipped rather than taken as fatal. A `path` naming the same
+  clone is still refused, because that path was a deliberate statement.
+- **An entry of its own wins.** A folder leaves out any checkout another entry
+  names by `path`, so one repo inside a listed folder can carry a `repo:`
+  override for its upstream:
+
+    ```yaml
+    repos:
+      - folder: ~/repos/forks
+      - path: ~/repos/forks/cvxpy     # a fork; the board follows upstream
+        repo: cvxpy/cvxpy
+    ```
+
+  Matching on the path rather than on `owner/name` is what makes that work,
+  since the point of the override is that the name comes out different. An
+  entry that names a repo the folder also holds (`- repo: org/x`) is likewise
+  one repo, not a duplicate: the entry decides the name and the forge, and the
+  folder still supplies the checkout path.
+- **`forge: gitlab` on a folder covers every checkout in it**, though with
+  checkouts to read the origin off it is not needed at all.
+
+`JQ_IGNORE` is the way to drop one repo a folder sweeps up without listing the
+rest by hand.
 
 Edit `repos.yml`, `docker restart jq-fleet`, and the fleet is whatever you just
 wrote. Both halves of the collector read the same list, so the GitHub panels
@@ -109,10 +164,12 @@ alarming.
 |---|---|---|
 | `path` | | A checkout on this machine, written as you would write it yourself. `~` is your home directory — which the container sees as the single `-v "$HOME:/host:ro"` mount — and a relative path is relative to it too. |
 | `repo` | | `owner/name`. Optional next to a `path` — it overrides the origin, which is what you want for a fork whose board should follow upstream. On its own it monitors a repo you have not cloned: GitHub panels are gathered, the working-copy panels stay empty for that row. |
+| `folder` | | A directory full of checkouts. Every checkout directly inside it joins the fleet, one level deep and no further — see [A folder of repos](#a-folder-of-repos). Cannot be combined with `path` or `repo`, which describe one repo each. |
 
 A bare string is shorthand for `path`. Duplicate entries, a path that is not a
-checkout, and an entry with neither key all stop the collector at startup —
-better a refusal than a board that is quietly one repo short.
+checkout, a folder that is missing or empty of checkouts, and an entry with
+neither key all stop the collector at startup — better a refusal than a board
+that is quietly one repo short.
 
 The one thing that is *not* fatal is a `path` that cannot be reached alongside
 an explicit `repo:`. That is what running without the `$HOME` mount looks like,
