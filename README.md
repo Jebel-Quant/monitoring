@@ -10,8 +10,9 @@ A Grafana board for the state of your repo fleet — template drift, CI on the
 default branch, open pull requests, and the working copies on this machine —
 with Prometheus keeping the history and six alert rules on top.
 
-One container, one file. Nothing is discovered: a repo is on the board because
-you listed it in `repos.yml`, and for no other reason.
+One container, one file. Nothing is discovered behind your back: a repo is on
+the board because `repos.yml` names it — or names the folder you keep it in —
+and for no other reason.
 
 ![The fleet board: tiles counting repos monitored, open PRs and issues, CI red on main, PRs with red checks, local clones out of sync, dirty working copies, branch protection and Dependabot, above a seven-day trend of open problems by kind.](dashboard.png)
 
@@ -22,12 +23,13 @@ table of exactly which repos are behind its number — see
 
 ## Recipe
 
-Write a `repos.yml` — one entry per repo you want on the board:
+Write a `repos.yml` — one entry per repo you want on the board, or one
+entry for a folder of them:
 
 ```yaml
 repos:
   - path: ~/repos/jebel-quant/rhiza     # a checkout on this machine
-  - path: ~/repos/cvxgrp/cvxsimulator
+  - folder: ~/repos/cvxgrp              # every checkout in a folder
   - repo: Jebel-Quant/actions           # monitored, but not cloned here
   - repo: acme/platform/infra/web       # GitLab, on the same board
     forge: gitlab
@@ -35,7 +37,10 @@ repos:
 
 `namespace/name` comes from each checkout's `origin`, so the path is all you
 write, and the path is used as written — a checkout does not have to live at
-`<root>/<owner>/<name>`. **GitHub and GitLab repos share one board**; the forge
+`<root>/<owner>/<name>`. **A `folder:` puts every checkout inside it on the
+board**, one level deep, which is how an org you keep whole stays one line
+instead of twenty — see
+[A folder of repos](docs/configuration.md#a-folder-of-repos). **GitHub and GitLab repos share one board**; the forge
 is read off the origin's host where there is a checkout, and stated with
 `forge: gitlab` where there is not — see
 [Configuration](docs/configuration.md#github-and-gitlab-in-the-same-fleet).

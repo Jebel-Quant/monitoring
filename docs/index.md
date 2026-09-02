@@ -10,8 +10,9 @@ A Grafana board for the state of your repo fleet — template drift, CI on the
 default branch, open pull requests, and the working copies on your machine —
 with Prometheus keeping the history and six alert rules on top.
 
-One container, one file. **Nothing is discovered:** a repo is on the board
-because you listed it in `repos.yml`, and for no other reason.
+One container, one file. **Nothing is discovered behind your back:** a repo is
+on the board because `repos.yml` names it — or names the folder you keep it in —
+and for no other reason.
 
 ## What you need
 
@@ -20,17 +21,19 @@ token that can read the repos you list.
 
 ## The recipe
 
-Write a `repos.yml` — one entry per repo you want on the board:
+Write a `repos.yml` — one entry per repo you want on the board, or one
+entry for a folder of them:
 
 ```yaml
 repos:
   - path: ~/repos/jebel-quant/rhiza     # a checkout on this machine
-  - path: ~/repos/cvxgrp/cvxsimulator
+  - folder: ~/repos/cvxgrp              # every checkout in a folder
   - repo: Jebel-Quant/actions           # monitored, but not cloned here
 ```
 
-`owner/name` comes from each checkout's `origin`, so the path is all you write.
-Then:
+`owner/name` comes from each checkout's `origin`, so the path is all you write,
+and a [`folder:`](configuration.md#a-folder-of-repos) is every checkout inside
+it — one line for an org you keep whole. Then:
 
 ```bash
 docker run -d --name jq-fleet \

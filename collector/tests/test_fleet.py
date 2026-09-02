@@ -714,3 +714,192 @@ def test_the_duplicate_message_stays_plain_when_the_forge_matches(tmp_path):
 
     with pytest.raises(repos.FleetError, match="acme/web is listed twice$"):
         repos.load(write_fleet(tmp_path, body))
+
+
+# -- a folder of repos -------------------------------------------------------
+#
+# One entry, however many checkouts are in it. Membership is still decided by
+# the file - the folder is named there, and only its own children are looked at
+# - which is what keeps this from being the whole-root walk it replaced.
+
+
+def test_every_checkout_in_a_folder_joins_the_fleet(tmp_path):
+    make_checkout(tmp_path, "org", "alpha")
+    make_checkout(tmp_path, "org", "beta")
+
+    fleet, paths, forges = repos.load(write_fleet(tmp_path, f"  - folder: {tmp_path / 'org'}\n"))
+
+    assert fleet == ("org/alpha", "org/beta")
+    assert paths == {
+        "org/alpha": str(tmp_path / "org" / "alpha"),
+        "org/beta": str(tmp_path / "org" / "beta"),
+    }
+    assert forges == {"org/alpha": "github", "org/beta": "github"}
+
+
+def test_a_folder_is_scanned_one_level_and_no_deeper(tmp_path):
+    """`folder: ~` would otherwise be a whole-disk walk.
+
+    A folder says where you keep a set of repos, and one level is what that
+    means. Anything more is the discovery this file exists to have got rid of.
+    """
+    make_checkout(tmp_path, "org", "alpha")
+    make_checkout(tmp_path / "org" / "deeper", "org", "buried")
+    (tmp_path / "org" / "not-a-repo").mkdir()
+    (tmp_path / "org" / "notes.md").write_text("x\n")
+
+    fleet, _paths, _forges = repos.load(write_fleet(tmp_path, f"  - folder: {tmp_path / 'org'}\n"))
+
+    assert fleet == ("org/alpha",)
+
+
+def test_a_folder_that_is_not_there_is_refused(tmp_path):
+    """The same call as an unreachable `path`: better a refusal than a board
+    quietly short a folder's worth of repos."""
+    with pytest.raises(repos.FleetError, match="cannot read folder"):
+        repos.load(write_fleet(tmp_path, f"  - folder: {tmp_path / 'absent'}\n"))
+
+
+def test_a_folder_with_no_checkouts_in_it_is_refused(tmp_path):
+    """Naming the folder was a request for the repos in it; there are none."""
+    (tmp_path / "org").mkdir()
+    (tmp_path / "org" / "not-a-repo").mkdir()
+
+    with pytest.raises(repos.FleetError, match="holds no git checkouts"):
+        repos.load(write_fleet(tmp_path, f"  - folder: {tmp_path / 'org'}\n"))
+
+
+@pytest.mark.parametrize("key", ["path", "repo"])
+def test_a_folder_cannot_also_be_a_path_or_a_repo(tmp_path, key):
+    """A folder stands for many repos, so there is no one path or name for it."""
+    make_checkout(tmp_path, "org", "alpha")
+    body = f"  - folder: {tmp_path / 'org'}\n    {key}: whatever/it-is\n"
+
+    with pytest.raises(repos.FleetError, match="cannot also carry"):
+        repos.load(write_fleet(tmp_path, body))
+
+
+@pytest.mark.parametrize("explicit_first", [True, False])
+def test_an_entry_naming_a_repo_outright_wins_over_the_folder(tmp_path, explicit_first):
+    """How one repo in a listed folder gets a `repo:` override.
+
+    The checkout is a fork and the board should follow upstream. Colliding
+    would mean the folder could not be used at all; the deliberate entry wins,
+    whichever order the two are written in.
+    """
+    make_checkout(tmp_path, "org", "alpha")
+    fork = make_checkout(tmp_path, "org", "beta")
+    folder = f"  - folder: {tmp_path / 'org'}\n"
+    override = f"  - path: {fork}\n    repo: upstream/beta\n"
+
+    fleet, paths, _forges = repos.load(
+        write_fleet(tmp_path, override + folder if explicit_first else folder + override)
+    )
+
+    assert set(fleet) == {"org/alpha", "upstream/beta"}
+    assert "org/beta" not in paths
+    assert paths["upstream/beta"] == str(fork)
+
+
+def test_a_repo_listed_outright_and_swept_up_by_a_folder_is_one_repo(tmp_path):
+    """Belt and braces in repos.yml is not a duplicate to refuse over."""
+    path = make_checkout(tmp_path, "org", "alpha")
+    body = f"  - folder: {tmp_path / 'org'}\n  - path: {path}\n"
+
+    fleet, paths, _forges = repos.load(write_fleet(tmp_path, body))
+
+    assert fleet == ("org/alpha",)
+    assert paths == {"org/alpha": str(path)}
+
+
+def test_two_folders_holding_the_same_repo_are_refused(tmp_path):
+    """Two checkouts, one row: there is no saying which one the board means."""
+    make_checkout(tmp_path / "one", "org", "alpha")
+    make_checkout(tmp_path / "two", "org", "alpha")
+    body = f"  - folder: {tmp_path / 'one' / 'org'}\n  - folder: {tmp_path / 'two' / 'org'}\n"
+
+    with pytest.raises(repos.FleetError, match="checked out at .* and at "):
+        repos.load(write_fleet(tmp_path, body))
+
+
+def test_a_declared_forge_covers_every_checkout_in_the_folder(tmp_path):
+    """A whole folder on the other forge is one line, not one line per repo."""
+    make_checkout(tmp_path, "acme", "web", origin="git@gitlab.com:acme/web.git")
+    make_checkout(tmp_path, "acme", "api", origin="git@gitlab.com:acme/api.git")
+    body = f"  - folder: {tmp_path / 'acme'}\n    forge: gitlab\n"
+
+    assert repos.load(write_fleet(tmp_path, body))[2] == {
+        "acme/api": "gitlab",
+        "acme/web": "gitlab",
+    }
+
+
+def test_a_bad_forge_on_a_folder_is_refused_once(tmp_path):
+    make_checkout(tmp_path, "org", "alpha")
+    body = f"  - folder: {tmp_path / 'org'}\n    forge: gitbucket\n"
+
+    with pytest.raises(repos.FleetError, match="forge 'gitbucket'"):
+        repos.load(write_fleet(tmp_path, body))
+
+
+def test_a_scratch_clone_in_the_folder_is_skipped_not_fatal(tmp_path, caplog):
+    """A clone with no origin cannot be named, and nobody asked to monitor it.
+
+    A listed `path` to the same clone is still refused - that path was a
+    deliberate statement. A folder is not, so one stray clone must not take the
+    whole board down.
+    """
+    make_checkout(tmp_path, "org", "alpha")
+    scratch = make_checkout(tmp_path, "org", "scratch")
+    subprocess.run(["git", "-C", str(scratch), "remote", "remove", "origin"], check=True)
+
+    with caplog.at_level("WARNING"):
+        fleet, paths, _forges = repos.load(
+            write_fleet(tmp_path, f"  - folder: {tmp_path / 'org'}\n")
+        )
+
+    assert fleet == ("org/alpha",)
+    assert str(scratch) not in paths.values()
+    assert "skipping" in caplog.text
+
+
+def test_a_folder_of_nothing_but_scratch_clones_refuses_to_start(tmp_path):
+    """The file said something and none of it survived - that is not a fleet."""
+    scratch = make_checkout(tmp_path, "org", "scratch")
+    subprocess.run(["git", "-C", str(scratch), "remote", "remove", "origin"], check=True)
+
+    with pytest.raises(repos.FleetError, match="could identify"):
+        repos.load(write_fleet(tmp_path, f"  - folder: {tmp_path / 'org'}\n"))
+
+
+def test_a_folder_is_read_through_the_host_mount(tmp_path):
+    """`~/repos/org` in repos.yml is /host/repos/org inside the container."""
+    make_checkout(tmp_path / "repos", "org", "alpha")
+
+    fleet, paths, _forges = repos.load(
+        write_fleet(tmp_path, "  - folder: ~/repos/org\n"), host_root=str(tmp_path)
+    )
+
+    assert fleet == ("org/alpha",)
+    assert paths == {"org/alpha": str(tmp_path / "repos" / "org" / "alpha")}
+
+
+@pytest.mark.parametrize("outright_first", [True, False])
+def test_naming_a_repo_the_folder_also_holds_is_one_entry(tmp_path, outright_first):
+    """`- repo: org/alpha` beside the folder org/alpha is checked out in.
+
+    The entry written for the repo itself is the deliberate one, so it decides
+    the name and the forge either way round - but the folder still says where
+    the checkout is, which the other entry never claimed to know.
+    """
+    path = make_checkout(tmp_path, "org", "alpha")
+    outright = "  - repo: org/alpha\n"
+    folder = f"  - folder: {tmp_path / 'org'}\n"
+
+    fleet, paths, forges = repos.load(
+        write_fleet(tmp_path, outright + folder if outright_first else folder + outright)
+    )
+
+    assert fleet == ("org/alpha",)
+    assert paths == {"org/alpha": str(path)}
+    assert forges == {"org/alpha": "github"}

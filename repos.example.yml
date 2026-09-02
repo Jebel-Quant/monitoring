@@ -5,8 +5,8 @@
 # /config/repos.yml and read at startup; nothing is generated from it, so there
 # is no second file to fall out of step.
 #
-# Nothing is discovered. A repo appears on the board because it is listed here,
-# and for no other reason.
+# A repo appears on the board because it is listed here - by its own path, or
+# by a folder you keep it in - and for no other reason.
 
 repos:
   # The usual entry: a path to a checkout, written the way you would write it
@@ -16,11 +16,30 @@ repos:
   - path: ~/repos/jebel-quant/monitoring
   - path: ~/repos/jebel-quant/rhiza
 
+  # A whole folder: every checkout sitting directly inside it is on the board,
+  # so an org you keep complete is one line instead of twenty, and the twenty
+  # cannot drift out of step with what is actually on disk. Clone a repo into
+  # the folder and it joins at the next restart.
+  #
+  # Only the folder's own children are looked at, never their children in turn
+  # - name the folder the checkouts are directly in. A directory that is not a
+  # checkout is passed over, and so is a clone with no origin remote to name it
+  # by; a folder that is missing, or that holds no checkouts at all, refuses to
+  # start, because you asked for the repos in it and there are none.
+  # - folder: ~/repos/cvxgrp
+
   # Only some of a large shared org is yours, so name those repos one by one.
   - path: ~/repos/cvxgrp/cvxsimulator
 
   # Override the origin when the checkout is a fork and you want the board to
   # follow upstream rather than your copy.
+  # - path: ~/repos/forks/cvxpy
+  #   repo: cvxpy/cvxpy
+
+  # This works inside a listed folder too: a folder leaves out any checkout
+  # another entry names by `path`, so the two lines below put every repo in
+  # ~/repos/forks on the board with cvxpy following upstream.
+  # - folder: ~/repos/forks
   # - path: ~/repos/forks/cvxpy
   #   repo: cvxpy/cvxpy
 
@@ -47,6 +66,12 @@ repos:
 
   # A GitLab checkout, where the forge follows from the origin remote's host.
   # - path: ~/repos/acme/web
+
+  # A whole folder on GitLab. Stating the forge once covers every checkout the
+  # folder turns up, though with a checkout to read the origin off it is not
+  # needed at all.
+  # - folder: ~/repos/acme
+  #   forge: gitlab
 
   # Two notes on a mixed fleet:
   #
