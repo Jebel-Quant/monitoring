@@ -903,3 +903,89 @@ def test_naming_a_repo_the_folder_also_holds_is_one_entry(tmp_path, outright_fir
     assert fleet == ("org/alpha",)
     assert paths == {"org/alpha": str(path)}
     assert forges == {"org/alpha": "github"}
+
+
+def test_a_folder_can_exclude_one_of_its_checkouts(tmp_path):
+    """What makes a folder usable for a directory that is nearly all yours.
+
+    A clone of somebody else's repo kept alongside your own does not belong on
+    your fleet board, and naming the one exception is shorter than listing
+    everything else.
+    """
+    make_checkout(tmp_path, "org", "alpha")
+    make_checkout(tmp_path, "org", "numpy", origin="git@github.com:numpy/numpy.git")
+    body = f"  - folder: {tmp_path / 'org'}\n    exclude: [numpy]\n"
+
+    fleet, paths, _forges = repos.load(write_fleet(tmp_path, body))
+
+    assert fleet == ("org/alpha",)
+    assert "numpy/numpy" not in paths
+
+
+def test_one_exclude_needs_no_brackets(tmp_path):
+    """`exclude: numpy` is the common case and the brackets are noise."""
+    make_checkout(tmp_path, "org", "alpha")
+    make_checkout(tmp_path, "org", "numpy", origin="git@github.com:numpy/numpy.git")
+    body = f"  - folder: {tmp_path / 'org'}\n    exclude: numpy\n"
+
+    assert repos.load(write_fleet(tmp_path, body))[0] == ("org/alpha",)
+
+
+def test_excludes_name_directories_not_repos(tmp_path):
+    """The directory name is the one thing about a child that is knowable
+    without reading its git config, and the thing you see when you list the
+    folder. A checkout's name need not match its repo's - the folder `funnel`
+    is `VanekPetr/funnel` - so which of the two is meant has to be settled."""
+    make_checkout(tmp_path, "org", "alpha")
+    make_checkout(tmp_path, "org", "funnel", origin="git@github.com:VanekPetr/funnel.git")
+    body = f"  - folder: {tmp_path / 'org'}\n    exclude: [funnel]\n"
+
+    assert repos.load(write_fleet(tmp_path, body))[0] == ("org/alpha",)
+
+
+def test_an_exclude_written_as_a_repo_name_is_refused(tmp_path):
+    """`exclude: VanekPetr/funnel` would otherwise silently exclude nothing."""
+    make_checkout(tmp_path, "org", "alpha")
+    make_checkout(tmp_path, "org", "funnel", origin="git@github.com:VanekPetr/funnel.git")
+    body = f"  - folder: {tmp_path / 'org'}\n    exclude: [VanekPetr/funnel]\n"
+
+    with pytest.raises(repos.FleetError, match="not a directory name"):
+        repos.load(write_fleet(tmp_path, body))
+
+
+def test_an_exclude_with_nothing_to_exclude_is_said_out_loud(tmp_path, caplog):
+    """Deleting the clone you did not want must not take the board down.
+
+    Every other mistake in this file is refused, and this one is not, because
+    an exclude exists to keep a repo off the board: nothing there to exclude
+    means that already holds, so the outcome is the one the file asked for and
+    only the line is spent. Said out loud all the same - it looks identical to
+    a misspelt exclude, which does put an unwanted repo on the board.
+    """
+    make_checkout(tmp_path, "org", "alpha")
+    body = f"  - folder: {tmp_path / 'org'}\n    exclude: [nupmy]\n"
+
+    with caplog.at_level("WARNING"):
+        fleet, _paths, _forges = repos.load(write_fleet(tmp_path, body))
+
+    assert fleet == ("org/alpha",)
+    assert "nothing called nupmy to exclude" in caplog.text
+
+
+@pytest.mark.parametrize("declared", ["42", "{a: b}", "[numpy, 42]"])
+def test_a_malformed_exclude_is_refused(tmp_path, declared):
+    make_checkout(tmp_path, "org", "alpha")
+    body = f"  - folder: {tmp_path / 'org'}\n    exclude: {declared}\n"
+
+    with pytest.raises(repos.FleetError, match="must be a directory name"):
+        repos.load(write_fleet(tmp_path, body))
+
+
+def test_exclude_on_an_entry_that_is_not_a_folder_is_refused(tmp_path):
+    """One repo has nothing to exclude from, and reading the key as decoration
+    would leave you believing a repo was off the board while it sat on it."""
+    path = make_checkout(tmp_path, "org", "alpha")
+    body = f"  - path: {path}\n    exclude: [numpy]\n"
+
+    with pytest.raises(repos.FleetError, match="belongs to a `folder`"):
+        repos.load(write_fleet(tmp_path, body))

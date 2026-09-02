@@ -28,6 +28,14 @@ repos:
   # start, because you asked for the repos in it and there are none.
   # - folder: ~/repos/cvxgrp
 
+  # A folder that is nearly all yours: `exclude` names the children to leave
+  # out, by directory name, which is what you see when you list the folder. A
+  # single name needs no brackets. An exclude with nothing left to exclude is
+  # warned about rather than refused: deleting a clone you never wanted is a
+  # normal thing to do, and it leaves the board exactly as you asked for it.
+  # - folder: ~/repos/jebel-quant
+  #   exclude: [numpy]        # a clone of upstream numpy, not ours
+
   # Only some of a large shared org is yours, so name those repos one by one.
   - path: ~/repos/cvxgrp/cvxsimulator
 
