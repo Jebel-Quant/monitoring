@@ -92,6 +92,35 @@ def _declared_forge(item: dict, index: int) -> str | None:
     return declared
 
 
+def _excluded(item: dict, index: int, raw: str) -> frozenset[str]:
+    """A folder's ``exclude:`` list, as a set of directory names.
+
+    A single name may be written on its own - ``exclude: numpy`` - because a
+    one-element list is the common case and the brackets are noise.
+    """
+    declared = item.get("exclude")
+    if declared is None:
+        return frozenset()
+    if isinstance(declared, str):
+        declared = [declared]
+    if not isinstance(declared, list) or not all(isinstance(name, str) for name in declared):
+        raise FleetError(
+            f"entry {index}: `exclude` on folder {raw} must be a directory name "
+            f"or a list of them, not {declared!r}"
+        )
+
+    names = {name.strip().strip("/") for name in declared}
+    if nested := sorted(name for name in names if "/" in name):
+        # `exclude: acme/web` reads as a repo name, and a folder is scanned one
+        # level deep, so there is nothing at that path for it to mean.
+        raise FleetError(
+            f"entry {index}: exclude {', '.join(nested)} on folder {raw} is not a "
+            "directory name - excludes name the folder's own subdirectories, "
+            "not paths and not `owner/name`"
+        )
+    return frozenset(names - {""})
+
+
 def _folder(item: dict, index: int, host_root: str, claimed: frozenset[str]) -> list[dict]:
     """A ``folder:`` entry -> one ``path:`` entry per checkout inside it.
 
@@ -106,6 +135,15 @@ def _folder(item: dict, index: int, host_root: str, claimed: frozenset[str]) -> 
     written out for that one checkout is the only entry for it. Matching on the
     path rather than on ``namespace/name`` is what makes a ``repo:`` override
     work, since the whole point of one is that the name comes out different.
+
+    ``exclude:`` names the folder's children to leave out, by directory name -
+    the one thing about a child that is knowable without reading its git
+    config, and the thing you can see when you list the folder. It is what
+    makes a folder usable for a directory that is *nearly* all yours: a clone
+    of somebody else's repo kept alongside your own does not belong on your
+    fleet board, and naming the exception is shorter than listing the rest.
+    An exclude with nothing to exclude is a warning rather than a refusal, for
+    the reason given where it is logged.
 
     A folder that is not there is refused, exactly as an unreachable ``path``
     is, and so is one holding no checkouts at all. Both look identical to a
@@ -123,6 +161,7 @@ def _folder(item: dict, index: int, host_root: str, claimed: frozenset[str]) -> 
     # Validated here so a bad `forge:` on the folder is refused once, against
     # the line that was actually written, rather than per checkout found.
     forge = _declared_forge(item, index)
+    excluded = _excluded(item, index, raw)
 
     folder = resolve_path(raw, host_root)
     try:
@@ -141,10 +180,31 @@ def _folder(item: dict, index: int, host_root: str, claimed: frozenset[str]) -> 
             "A folder is scanned one level deep, so name the folder the "
             "checkouts are directly in."
         )
+    if missed := excluded - {os.path.basename(child) for child in checkouts}:
+        # Said out loud, but not fatal, and the asymmetry is deliberate. An
+        # exclude exists to keep something off the board; nothing there to
+        # exclude means that has already happened, so the outcome is the one
+        # the file asked for and the line is merely spent - which is what
+        # deleting a clone you did not want looks like, a normal thing to do
+        # that must not take the board down. It is also what a misspelt
+        # exclude looks like, and that one does put an unwanted repo on the
+        # board - but as a row you can see, next to this line in the log,
+        # rather than as the silently missing repo the refusals here guard.
+        log.warning(
+            "folder %s: nothing called %s to exclude - the line has nothing left to do",
+            raw,
+            ", ".join(sorted(missed)),
+        )
+
     # The emptiness check is on what is in the folder, not on what is left
-    # after the claimed ones go: a folder whose every checkout has an entry of
-    # its own is a redundant line, not a mistake worth refusing to start over.
-    taken = [child for child in checkouts if child not in claimed]
+    # after the excluded and claimed ones go: a folder whose every checkout has
+    # an entry of its own is a redundant line, not a mistake worth refusing to
+    # start over.
+    taken = [
+        child
+        for child in checkouts
+        if child not in claimed and os.path.basename(child) not in excluded
+    ]
     if len(taken) == len(checkouts):
         log.info("folder %s: %d checkouts", raw, len(taken))
     else:
@@ -168,6 +228,15 @@ def _expand(
     """
     if isinstance(item, dict) and item.get("folder"):
         return [(found, True) for found in _folder(item, index, host_root, claimed)]
+    if isinstance(item, dict) and item.get("exclude"):
+        # An entry that is one repo has nothing to exclude from, and reading
+        # the key as decoration would leave somebody believing a repo was off
+        # the board while it sat on it.
+        raise FleetError(
+            f"entry {index} ({item!r}): `exclude` belongs to a `folder`, which "
+            "this entry is not - it names one repo, so there is nothing to "
+            "leave out of it."
+        )
     return [(item, False)]
 
 

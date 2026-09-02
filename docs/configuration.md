@@ -85,8 +85,40 @@ The rules, all of which exist so the board cannot go quietly short:
 - **`forge: gitlab` on a folder covers every checkout in it**, though with
   checkouts to read the origin off it is not needed at all.
 
-`JQ_IGNORE` is the way to drop one repo a folder sweeps up without listing the
-rest by hand.
+### Excluding one repo from a folder
+
+A directory that is *nearly* all yours is the common case — a clone of somebody
+else's repo kept alongside your own, which has no business on your fleet board.
+Name the exception rather than listing everything else:
+
+```yaml
+repos:
+  - folder: ~/repos/jebel-quant
+    exclude: [numpy]      # a clone of upstream numpy, not ours
+```
+
+`exclude` names the folder's own **subdirectories**, which is the one thing
+about a child that is knowable without reading its git config and the thing you
+see when you list the folder — a checkout's directory need not be named after
+its repo, so `funnel` excludes the directory `funnel` whatever its origin says
+it is. A single name needs no brackets. Writing an `owner/name` there is
+refused, since a folder is one level deep and there is nothing at that path for
+it to mean.
+
+**An exclude with nothing to exclude is a warning, not a refusal** — the one
+mistake in this file that is not fatal. An exclude exists to keep a repo off the
+board, so a folder with no such checkout in it already satisfies the request:
+the outcome is the one you asked for and only the line is spent, which is what
+deleting a clone you never wanted looks like. It is logged, because a *misspelt*
+exclude looks identical from here and that one does put an unwanted repo on the
+board — as a row you can see, next to the warning, rather than as the silently
+missing repo every other refusal here guards against.
+
+`exclude` on an entry that is not a folder *is* refused — one repo has nothing
+to exclude from, and reading the key as decoration would leave you believing a
+repo was off the board while it sat on it.
+
+`JQ_IGNORE` remains the way to drop a repo without editing this file at all.
 
 Edit `repos.yml`, `docker restart jq-fleet`, and the fleet is whatever you just
 wrote. Both halves of the collector read the same list, so the GitHub panels
@@ -165,6 +197,7 @@ alarming.
 | `path` | | A checkout on this machine, written as you would write it yourself. `~` is your home directory — which the container sees as the single `-v "$HOME:/host:ro"` mount — and a relative path is relative to it too. |
 | `repo` | | `owner/name`. Optional next to a `path` — it overrides the origin, which is what you want for a fork whose board should follow upstream. On its own it monitors a repo you have not cloned: GitHub panels are gathered, the working-copy panels stay empty for that row. |
 | `folder` | | A directory full of checkouts. Every checkout directly inside it joins the fleet, one level deep and no further — see [A folder of repos](#a-folder-of-repos). Cannot be combined with `path` or `repo`, which describe one repo each. |
+| `exclude` | | Only on a `folder`: subdirectory names to leave out, as a list or a single name. One with nothing to exclude is warned about, not refused — see [Excluding one repo from a folder](#excluding-one-repo-from-a-folder). |
 
 A bare string is shorthand for `path`. Duplicate entries, a path that is not a
 checkout, a folder that is missing or empty of checkouts, and an entry with
