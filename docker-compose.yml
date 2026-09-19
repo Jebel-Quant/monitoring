@@ -47,3 +47,9 @@ services:
 
 volumes:
   fleet-data:
+    # Named outright, because compose would otherwise call it
+    # jq-monitoring_fleet-data while the README's docker run writes to
+    # jq-fleet-data. Two names is two histories: bring the board up the other
+    # way once and every panel starts from empty, with the real history still
+    # on disk under a name nothing reads. One name, either way in.
+    name: jq-fleet-data
