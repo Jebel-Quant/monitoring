@@ -1,0 +1,223 @@
+# HELP jq_collector_last_success_timestamp_seconds Unix time of the last successful refresh, per source.
+# TYPE jq_collector_last_success_timestamp_seconds gauge
+jq_collector_last_success_timestamp_seconds{source="github"} 1.0
+jq_collector_last_success_timestamp_seconds{source="local"} 3.0
+# HELP jq_collector_refresh_duration_seconds Wall-clock seconds the last refresh took, per source.
+# TYPE jq_collector_refresh_duration_seconds gauge
+jq_collector_refresh_duration_seconds{source="github"} 2.0
+jq_collector_refresh_duration_seconds{source="local"} 0.5
+# HELP jq_collector_errors_total Refreshes that raised, per source.
+# TYPE jq_collector_errors_total counter
+jq_collector_errors_total{source="github"} 3.0
+jq_collector_errors_total{source="local"} 0.0
+# HELP jq_github_rate_limit_remaining GitHub REST calls left in the current window.
+# TYPE jq_github_rate_limit_remaining gauge
+jq_github_rate_limit_remaining 4000.0
+# HELP jq_github_rate_limit_limit GitHub REST calls allowed per window.
+# TYPE jq_github_rate_limit_limit gauge
+jq_github_rate_limit_limit 5000.0
+# HELP jq_github_rate_limit_reset_timestamp_seconds Unix time the rate window resets.
+# TYPE jq_github_rate_limit_reset_timestamp_seconds gauge
+jq_github_rate_limit_reset_timestamp_seconds 1234.0
+# HELP jq_template_latest_release_info Always 1; the label carries the newest published template release.
+# TYPE jq_template_latest_release_info gauge
+jq_template_latest_release_info{ref="v1.7.1"} 1.0
+# HELP jq_repo_info Always 1; labels carry the repo's identity for joining.
+# TYPE jq_repo_info gauge
+jq_repo_info{default_branch="main",forge="github",owner="Jebel-Quant",pulls_url="",repo="Jebel-Quant/rhiza",repo_url="",visibility="public"} 1.0
+jq_repo_info{default_branch="trunk",forge="gitlab",owner="acme/platform",pulls_url="https://gitlab.com/acme/platform/web/-/merge_requests",repo="acme/platform/web",repo_url="https://gitlab.com/acme/platform/web",visibility="private"} 1.0
+jq_repo_info{default_branch="main",forge="github",owner="o",pulls_url="",repo="o/loose",repo_url="",visibility="unknown"} 1.0
+jq_repo_info{default_branch="main",forge="github",owner="o",pulls_url="",repo="o/solo",repo_url="",visibility="unknown"} 1.0
+# HELP jq_repo_cloned 1 if the repo has a working copy on this machine.
+# TYPE jq_repo_cloned gauge
+jq_repo_cloned{repo="Jebel-Quant/rhiza"} 1.0
+jq_repo_cloned{repo="acme/platform/web"} 0.0
+jq_repo_cloned{repo="o/loose"} 1.0
+jq_repo_cloned{repo="o/solo"} 1.0
+# HELP jq_repo_last_push_timestamp_seconds Unix time of the last push to GitHub.
+# TYPE jq_repo_last_push_timestamp_seconds gauge
+jq_repo_last_push_timestamp_seconds{repo="Jebel-Quant/rhiza"} 1000.0
+jq_repo_last_push_timestamp_seconds{repo="acme/platform/web"} 0.0
+jq_repo_last_push_timestamp_seconds{repo="o/loose"} 0.0
+# HELP jq_rhiza_managed 1 if the repo carries a template pointer.
+# TYPE jq_rhiza_managed gauge
+jq_rhiza_managed{repo="Jebel-Quant/rhiza"} 1.0
+jq_rhiza_managed{repo="acme/platform/web"} 0.0
+jq_rhiza_managed{repo="o/loose"} 0.0
+# HELP jq_branch_protected 1 if the default branch is protected. Absent when the token cannot see protection.
+# TYPE jq_branch_protected gauge
+jq_branch_protected{repo="Jebel-Quant/rhiza"} 1.0
+jq_branch_protected{repo="o/loose"} 0.0
+# HELP jq_branch_required_reviews Approving reviews required to merge into the default branch.
+# TYPE jq_branch_required_reviews gauge
+jq_branch_required_reviews{repo="Jebel-Quant/rhiza"} 2.0
+jq_branch_required_reviews{repo="o/loose"} 0.0
+# HELP jq_branch_allows_force_push 1 if the protected default branch still allows force pushes.
+# TYPE jq_branch_allows_force_push gauge
+jq_branch_allows_force_push{repo="Jebel-Quant/rhiza"} 0.0
+jq_branch_allows_force_push{repo="o/loose"} 0.0
+# HELP jq_dependabot_alerts_enabled 1 if Dependabot alerts are on for the repo.
+# TYPE jq_dependabot_alerts_enabled gauge
+jq_dependabot_alerts_enabled{repo="Jebel-Quant/rhiza"} 1.0
+jq_dependabot_alerts_enabled{repo="acme/platform/web"} 0.0
+jq_dependabot_alerts_enabled{repo="o/loose"} 0.0
+# HELP jq_dependabot_open_alerts Open Dependabot alerts by severity. Absent when alerts are disabled.
+# TYPE jq_dependabot_open_alerts gauge
+jq_dependabot_open_alerts{repo="Jebel-Quant/rhiza",severity="critical"} 1.0
+jq_dependabot_open_alerts{repo="Jebel-Quant/rhiza",severity="high"} 0.0
+jq_dependabot_open_alerts{repo="Jebel-Quant/rhiza",severity="medium"} 0.0
+jq_dependabot_open_alerts{repo="Jebel-Quant/rhiza",severity="low"} 0.0
+jq_dependabot_open_alerts{repo="Jebel-Quant/rhiza",severity="moderate"} 3.0
+# HELP jq_rhiza_template_ref_info Always 1; the label carries the pinned template ref.
+# TYPE jq_rhiza_template_ref_info gauge
+jq_rhiza_template_ref_info{ref="v1.7.1",repo="Jebel-Quant/rhiza"} 1.0
+# HELP jq_rhiza_releases_behind Template releases published after the pinned ref. Absent when the ref is not a release.
+# TYPE jq_rhiza_releases_behind gauge
+jq_rhiza_releases_behind{repo="Jebel-Quant/rhiza"} 2.0
+# HELP jq_ci_last_run_info Always 1; labels carry the last completed default-branch run.
+# TYPE jq_ci_last_run_info gauge
+jq_ci_last_run_info{conclusion="success",repo="Jebel-Quant/rhiza",url="",workflow="ci"} 1.0
+jq_ci_last_run_info{conclusion="failure",repo="o/loose",url="",workflow="ci"} 1.0
+# HELP jq_ci_last_run_success 1 if the last completed default-branch run passed.
+# TYPE jq_ci_last_run_success gauge
+jq_ci_last_run_success{repo="Jebel-Quant/rhiza"} 0.0
+jq_ci_last_run_success{repo="o/loose"} 0.0
+# HELP jq_ci_last_run_timestamp_seconds Unix time that run finished.
+# TYPE jq_ci_last_run_timestamp_seconds gauge
+jq_ci_last_run_timestamp_seconds{repo="Jebel-Quant/rhiza"} 900.0
+jq_ci_last_run_timestamp_seconds{repo="o/loose"} 0.0
+# HELP jq_ci_last_run_duration_seconds How long that run took.
+# TYPE jq_ci_last_run_duration_seconds gauge
+jq_ci_last_run_duration_seconds{repo="Jebel-Quant/rhiza"} 42.0
+jq_ci_last_run_duration_seconds{repo="o/loose"} 0.0
+# HELP jq_ci_workflow_success Per workflow: 1 if its latest completed default-branch run passed.
+# TYPE jq_ci_workflow_success gauge
+jq_ci_workflow_success{repo="Jebel-Quant/rhiza",workflow="ci"} 1.0
+jq_ci_workflow_success{repo="Jebel-Quant/rhiza",workflow="docs"} 0.0
+jq_ci_workflow_success{repo="o/loose",workflow="ci"} 0.0
+# HELP jq_ci_workflow_timestamp_seconds Per workflow: when that run finished.
+# TYPE jq_ci_workflow_timestamp_seconds gauge
+jq_ci_workflow_timestamp_seconds{repo="Jebel-Quant/rhiza",workflow="ci"} 900.0
+jq_ci_workflow_timestamp_seconds{repo="Jebel-Quant/rhiza",workflow="docs"} 800.0
+jq_ci_workflow_timestamp_seconds{repo="o/loose",workflow="ci"} 1.0
+# HELP jq_ci_workflow_info Always 1; the label carries the URL of that workflow's latest run.
+# TYPE jq_ci_workflow_info gauge
+jq_ci_workflow_info{repo="Jebel-Quant/rhiza",url="u1",workflow="ci"} 1.0
+jq_ci_workflow_info{repo="Jebel-Quant/rhiza",url="u2",workflow="docs"} 1.0
+jq_ci_workflow_info{repo="o/loose",url="",workflow="ci"} 1.0
+# HELP jq_ci_workflows_failing How many of the repo's workflows are red on the default branch.
+# TYPE jq_ci_workflows_failing gauge
+jq_ci_workflows_failing{repo="Jebel-Quant/rhiza"} 1.0
+jq_ci_workflows_failing{repo="o/loose"} 1.0
+# HELP jq_ci_coverage_percent Line coverage from the newest default-branch coverage-report artifact. Absent when the repo publishes none.
+# TYPE jq_ci_coverage_percent gauge
+jq_ci_coverage_percent{repo="Jebel-Quant/rhiza"} 87.3
+# HELP jq_ci_coverage_lines Lines CI measured for that coverage figure. The percentage is not interpretable without it, and its denominator is not jq_local_code_lines.
+# TYPE jq_ci_coverage_lines gauge
+jq_ci_coverage_lines{repo="Jebel-Quant/rhiza"} 472.0
+# HELP jq_open_pull_requests Open pull requests.
+# TYPE jq_open_pull_requests gauge
+jq_open_pull_requests{repo="Jebel-Quant/rhiza"} 3.0
+jq_open_pull_requests{repo="acme/platform/web"} 0.0
+jq_open_pull_requests{repo="o/loose"} 0.0
+# HELP jq_open_issues Open issues, excluding pull requests.
+# TYPE jq_open_issues gauge
+jq_open_issues{repo="Jebel-Quant/rhiza"} 4.0
+jq_open_issues{repo="acme/platform/web"} 0.0
+jq_open_issues{repo="o/loose"} 0.0
+# HELP jq_open_pull_requests_failing Open pull requests whose checks are red.
+# TYPE jq_open_pull_requests_failing gauge
+jq_open_pull_requests_failing{repo="Jebel-Quant/rhiza"} 1.0
+jq_open_pull_requests_failing{repo="acme/platform/web"} 0.0
+jq_open_pull_requests_failing{repo="o/loose"} 0.0
+# HELP jq_pull_request_info Always 1; one series per open pull request.
+# TYPE jq_pull_request_info gauge
+jq_pull_request_info{author="u",checks="success",draft="false",number="7",repo="Jebel-Quant/rhiza",title="pr 7",url=""} 1.0
+jq_pull_request_info{author="u",checks="failure",draft="false",number="8",repo="Jebel-Quant/rhiza",title="pr 8",url=""} 1.0
+jq_pull_request_info{author="u",checks="cancelled",draft="true",number="9",repo="Jebel-Quant/rhiza",title="pr 9",url=""} 1.0
+# HELP jq_pull_request_created_timestamp_seconds Unix time the pull request was opened.
+# TYPE jq_pull_request_created_timestamp_seconds gauge
+jq_pull_request_created_timestamp_seconds{number="7",repo="Jebel-Quant/rhiza"} 1.0
+jq_pull_request_created_timestamp_seconds{number="8",repo="Jebel-Quant/rhiza"} 1.0
+jq_pull_request_created_timestamp_seconds{number="9",repo="Jebel-Quant/rhiza"} 1.0
+# HELP jq_merged_pull_request_timestamp_seconds Unix time a pull request was merged. topk() over this gives the newest.
+# TYPE jq_merged_pull_request_timestamp_seconds gauge
+jq_merged_pull_request_timestamp_seconds{author="a",number="5",repo="Jebel-Quant/rhiza",title="five"} 500.0
+jq_merged_pull_request_timestamp_seconds{author="b",number="4",repo="Jebel-Quant/rhiza",title="four"} 400.0
+# HELP jq_merged_pull_request_info Always 1; the label carries the merged pull request's URL.
+# TYPE jq_merged_pull_request_info gauge
+jq_merged_pull_request_info{number="5",repo="Jebel-Quant/rhiza",url="m5"} 1.0
+jq_merged_pull_request_info{number="4",repo="Jebel-Quant/rhiza",url="m4"} 1.0
+# HELP jq_local_branch_info Always 1; the label carries the checked-out branch.
+# TYPE jq_local_branch_info gauge
+jq_local_branch_info{branch="main",repo="Jebel-Quant/rhiza"} 1.0
+jq_local_branch_info{branch="feature",repo="o/loose"} 1.0
+jq_local_branch_info{branch="unknown",repo="o/solo"} 1.0
+# HELP jq_local_on_default_branch 1 if the clone sits on its default branch.
+# TYPE jq_local_on_default_branch gauge
+jq_local_on_default_branch{repo="Jebel-Quant/rhiza"} 1.0
+jq_local_on_default_branch{repo="o/loose"} 0.0
+jq_local_on_default_branch{repo="o/solo"} 0.0
+# HELP jq_local_dirty_files Tracked files with uncommitted changes.
+# TYPE jq_local_dirty_files gauge
+jq_local_dirty_files{repo="Jebel-Quant/rhiza"} 1.0
+jq_local_dirty_files{repo="o/loose"} 1.0
+jq_local_dirty_files{repo="o/solo"} 0.0
+# HELP jq_local_untracked_files Untracked files in the working copy.
+# TYPE jq_local_untracked_files gauge
+jq_local_untracked_files{repo="Jebel-Quant/rhiza"} 2.0
+jq_local_untracked_files{repo="o/loose"} 2.0
+jq_local_untracked_files{repo="o/solo"} 0.0
+# HELP jq_local_ahead_commits Commits ahead of upstream, as of the last fetch.
+# TYPE jq_local_ahead_commits gauge
+jq_local_ahead_commits{repo="Jebel-Quant/rhiza"} 3.0
+jq_local_ahead_commits{repo="o/loose"} 3.0
+# HELP jq_local_behind_commits Commits behind upstream, as of the last fetch.
+# TYPE jq_local_behind_commits gauge
+jq_local_behind_commits{repo="Jebel-Quant/rhiza"} 4.0
+jq_local_behind_commits{repo="o/loose"} 4.0
+# HELP jq_local_stash_entries Stash entries.
+# TYPE jq_local_stash_entries gauge
+jq_local_stash_entries{repo="Jebel-Quant/rhiza"} 5.0
+jq_local_stash_entries{repo="o/loose"} 5.0
+jq_local_stash_entries{repo="o/solo"} 0.0
+# HELP jq_local_last_commit_timestamp_seconds Unix time of HEAD's commit.
+# TYPE jq_local_last_commit_timestamp_seconds gauge
+jq_local_last_commit_timestamp_seconds{repo="Jebel-Quant/rhiza"} 800.0
+jq_local_last_commit_timestamp_seconds{repo="o/loose"} 800.0
+jq_local_last_commit_timestamp_seconds{repo="o/solo"} 0.0
+# HELP jq_local_fetch_age_seconds Seconds since this clone last fetched. Read the ahead/behind counts against this.
+# TYPE jq_local_fetch_age_seconds gauge
+jq_local_fetch_age_seconds{repo="Jebel-Quant/rhiza"} 60.0
+jq_local_fetch_age_seconds{repo="o/loose"} 60.0
+# HELP jq_local_template_ref_info Always 1; the ref pinned in the *clone's* pointer. May lag the repo's.
+# TYPE jq_local_template_ref_info gauge
+jq_local_template_ref_info{ref="v1.7.0",repo="Jebel-Quant/rhiza"} 1.0
+jq_local_template_ref_info{ref="v1.7.0",repo="o/loose"} 1.0
+# HELP jq_local_default_branch_synced 1 if the local default branch is the same commit GitHub reports. Fetch-independent.
+# TYPE jq_local_default_branch_synced gauge
+jq_local_default_branch_synced{repo="Jebel-Quant/rhiza"} 1.0
+jq_local_default_branch_synced{repo="o/loose"} 0.0
+# HELP jq_local_code_lines Lines of tracked source outside the test tree, in the working copy.
+# TYPE jq_local_code_lines gauge
+jq_local_code_lines{repo="Jebel-Quant/rhiza"} 1477.0
+jq_local_code_lines{repo="o/loose"} 1477.0
+jq_local_code_lines{repo="o/solo"} 0.0
+# HELP jq_local_test_lines Lines of tracked source under the test tree, in the working copy.
+# TYPE jq_local_test_lines gauge
+jq_local_test_lines{repo="Jebel-Quant/rhiza"} 15186.0
+jq_local_test_lines{repo="o/loose"} 15186.0
+jq_local_test_lines{repo="o/solo"} 0.0
+# HELP jq_local_commits_30d Commits on the default branch in the last 30 days.
+# TYPE jq_local_commits_30d gauge
+jq_local_commits_30d{repo="Jebel-Quant/rhiza"} 124.0
+jq_local_commits_30d{repo="o/loose"} 124.0
+jq_local_commits_30d{repo="o/solo"} 0.0
+# HELP jq_local_commits_since_release Commits on the default branch since the newest tag. Absent when the clone has no tags.
+# TYPE jq_local_commits_since_release gauge
+jq_local_commits_since_release{repo="Jebel-Quant/rhiza"} 0.0
+jq_local_commits_since_release{repo="o/loose"} 0.0
+# HELP jq_local_last_release_info Always 1; the label carries the newest tag reachable in the clone.
+# TYPE jq_local_last_release_info gauge
+jq_local_last_release_info{ref="v1.7.1",repo="Jebel-Quant/rhiza"} 1.0
+jq_local_last_release_info{ref="v1.7.1",repo="o/loose"} 1.0
