@@ -34,7 +34,7 @@ from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
 
 from .forge import GOOD_CONCLUSIONS as _GOOD_CONCLUSIONS
 from .forge import INCONCLUSIVE_CONCLUSIONS as _INCONCLUSIVE_CONCLUSIONS
-from .state import Snapshot, WorkflowRun
+from .state import LocalRepo, RemoteRepo, Snapshot, WorkflowRun
 
 
 def _gauge(name: str, doc: str, labels: list[str] | None = None) -> GaugeMetricFamily:
@@ -42,8 +42,24 @@ def _gauge(name: str, doc: str, labels: list[str] | None = None) -> GaugeMetricF
 
 
 def render(snap: Snapshot):
-    keys = sorted((set(snap.remote) | set(snap.local)) - snap.excluded)
+    yield from _health(snap)
 
+    f = _Families()
+    for key in sorted((set(snap.remote) | set(snap.local)) - snap.excluded):
+        remote = snap.remote.get(key)
+        local = snap.local.get(key)
+        ident = [key]
+        _add_identity(f, key, remote, local)
+        if remote is not None:
+            _add_remote(f, ident, remote)
+        if local is not None:
+            _add_local(f, ident, local, remote)
+
+    yield from f.in_exposition_order()
+
+
+def _health(snap: Snapshot):
+    """The fleet-wide families: collector health, the rate limit, the newest template."""
     # -- collector health ------------------------------------------------
     last_success = _gauge(
         "jq_collector_last_success_timestamp_seconds",
@@ -96,438 +112,471 @@ def render(snap: Snapshot):
         latest.add_metric([snap.latest_template_ref], 1)
     yield latest
 
-    # -- identity --------------------------------------------------------
-    repo_info = _gauge(
-        "jq_repo_info",
-        "Always 1; labels carry the repo's identity for joining.",
-        ["repo", "owner", "default_branch", "visibility", "forge", "repo_url", "pulls_url"],
-    )
-    cloned = _gauge(
-        "jq_repo_cloned",
-        "1 if the repo has a working copy on this machine.",
-        ["repo"],
-    )
-    pushed = _gauge(
-        "jq_repo_last_push_timestamp_seconds",
-        "Unix time of the last push to GitHub.",
-        ["repo"],
-    )
 
-    # -- template drift --------------------------------------------------
-    managed = _gauge(
-        "jq_rhiza_managed",
-        "1 if the repo carries a template pointer.",
-        ["repo"],
-    )
-    ref_info = _gauge(
-        "jq_rhiza_template_ref_info",
-        "Always 1; the label carries the pinned template ref.",
-        ["repo", "ref"],
-    )
-    behind = _gauge(
-        "jq_rhiza_releases_behind",
-        "Template releases published after the pinned ref. Absent when the ref is not a release.",
-        ["repo"],
-    )
+class _Families:
+    """Every per-repo family, created empty and filled one repo at a time."""
 
-    # -- default-branch protection ---------------------------------------
-    # Absent, not zero, when GitHub would not say. `absent` and `0` are
-    # distinguishable in PromQL; a zero here would be read as a finding.
-    protected = _gauge(
-        "jq_branch_protected",
-        "1 if the default branch is protected. Absent when the token cannot see protection.",
-        ["repo"],
-    )
-    required_reviews = _gauge(
-        "jq_branch_required_reviews",
-        "Approving reviews required to merge into the default branch.",
-        ["repo"],
-    )
-    force_push = _gauge(
-        "jq_branch_allows_force_push",
-        "1 if the protected default branch still allows force pushes.",
-        ["repo"],
-    )
+    def __init__(self) -> None:
+        # -- identity --------------------------------------------------------
+        self.repo_info = _gauge(
+            "jq_repo_info",
+            "Always 1; labels carry the repo's identity for joining.",
+            ["repo", "owner", "default_branch", "visibility", "forge", "repo_url", "pulls_url"],
+        )
+        self.cloned = _gauge(
+            "jq_repo_cloned",
+            "1 if the repo has a working copy on this machine.",
+            ["repo"],
+        )
+        self.pushed = _gauge(
+            "jq_repo_last_push_timestamp_seconds",
+            "Unix time of the last push to GitHub.",
+            ["repo"],
+        )
 
-    # -- Dependabot -------------------------------------------------------
-    alerts_enabled = _gauge(
-        "jq_dependabot_alerts_enabled",
-        "1 if Dependabot alerts are on for the repo.",
-        ["repo"],
-    )
-    alerts = _gauge(
-        "jq_dependabot_open_alerts",
-        "Open Dependabot alerts by severity. Absent when alerts are disabled.",
-        ["repo", "severity"],
-    )
+        # -- template drift --------------------------------------------------
+        self.managed = _gauge(
+            "jq_rhiza_managed",
+            "1 if the repo carries a template pointer.",
+            ["repo"],
+        )
+        self.ref_info = _gauge(
+            "jq_rhiza_template_ref_info",
+            "Always 1; the label carries the pinned template ref.",
+            ["repo", "ref"],
+        )
+        self.behind = _gauge(
+            "jq_rhiza_releases_behind",
+            "Template releases published after the pinned ref. Absent when the ref is not a release.",
+            ["repo"],
+        )
 
-    # -- CI on the default branch ----------------------------------------
-    ci_info = _gauge(
-        "jq_ci_last_run_info",
-        "Always 1; labels carry the last completed default-branch run.",
-        ["repo", "conclusion", "workflow", "url"],
-    )
-    ci_ok = _gauge(
-        "jq_ci_last_run_success",
-        "1 if the last completed default-branch run passed.",
-        ["repo"],
-    )
-    ci_at = _gauge(
-        "jq_ci_last_run_timestamp_seconds",
-        "Unix time that run finished.",
-        ["repo"],
-    )
-    ci_dur = _gauge("jq_ci_last_run_duration_seconds", "How long that run took.", ["repo"])
-    wf_ok = _gauge(
-        "jq_ci_workflow_success",
-        "Per workflow: 1 if its latest completed default-branch run passed.",
-        ["repo", "workflow"],
-    )
-    wf_at = _gauge(
-        "jq_ci_workflow_timestamp_seconds",
-        "Per workflow: when that run finished.",
-        ["repo", "workflow"],
-    )
-    # Its own family rather than a label on jq_ci_workflow_success, which is a
-    # real gauge with 180 days behind it - adding a label there would start a
-    # new series and orphan all of it.
-    wf_info = _gauge(
-        "jq_ci_workflow_info",
-        "Always 1; the label carries the URL of that workflow's latest run.",
-        ["repo", "workflow", "url"],
-    )
-    coverage = _gauge(
-        "jq_ci_coverage_percent",
-        "Line coverage from the newest default-branch coverage-report artifact. "
-        "Absent when the repo publishes none.",
-        ["repo"],
-    )
-    coverage_lines = _gauge(
-        "jq_ci_coverage_lines",
-        "Lines CI measured for that coverage figure. The percentage is not "
-        "interpretable without it, and its denominator is not jq_local_code_lines.",
-        ["repo"],
-    )
-    wf_failing = _gauge(
-        "jq_ci_workflows_failing",
-        "How many of the repo's workflows are red on the default branch.",
-        ["repo"],
-    )
+        # -- default-branch protection ---------------------------------------
+        # Absent, not zero, when GitHub would not say. `absent` and `0` are
+        # distinguishable in PromQL; a zero here would be read as a finding.
+        self.protected = _gauge(
+            "jq_branch_protected",
+            "1 if the default branch is protected. Absent when the token cannot see protection.",
+            ["repo"],
+        )
+        self.required_reviews = _gauge(
+            "jq_branch_required_reviews",
+            "Approving reviews required to merge into the default branch.",
+            ["repo"],
+        )
+        self.force_push = _gauge(
+            "jq_branch_allows_force_push",
+            "1 if the protected default branch still allows force pushes.",
+            ["repo"],
+        )
 
-    # -- pull requests ---------------------------------------------------
-    pr_count = _gauge("jq_open_pull_requests", "Open pull requests.", ["repo"])
-    issue_count = _gauge(
-        "jq_open_issues",
-        "Open issues, excluding pull requests.",
-        ["repo"],
-    )
-    pr_failing = _gauge(
-        "jq_open_pull_requests_failing",
-        "Open pull requests whose checks are red.",
-        ["repo"],
-    )
-    pr_info = _gauge(
-        "jq_pull_request_info",
-        "Always 1; one series per open pull request.",
-        ["repo", "number", "title", "author", "checks", "draft", "url"],
-    )
-    merged_at = _gauge(
-        "jq_merged_pull_request_timestamp_seconds",
-        "Unix time a pull request was merged. topk() over this gives the newest.",
-        ["repo", "number", "title", "author"],
-    )
-    # The URL rides on its own family rather than on the timestamp above,
-    # because that timestamp *is* the merged-PR timeline - the history the
-    # "Recently merged" panel reads. A label there would have orphaned every
-    # existing series and, until they went stale, shown each merged PR twice.
-    merged_info = _gauge(
-        "jq_merged_pull_request_info",
-        "Always 1; the label carries the merged pull request's URL.",
-        ["repo", "number", "url"],
-    )
-    pr_created = _gauge(
-        "jq_pull_request_created_timestamp_seconds",
-        "Unix time the pull request was opened.",
-        ["repo", "number"],
-    )
+        # -- Dependabot -------------------------------------------------------
+        self.alerts_enabled = _gauge(
+            "jq_dependabot_alerts_enabled",
+            "1 if Dependabot alerts are on for the repo.",
+            ["repo"],
+        )
+        self.alerts = _gauge(
+            "jq_dependabot_open_alerts",
+            "Open Dependabot alerts by severity. Absent when alerts are disabled.",
+            ["repo", "severity"],
+        )
 
-    # -- local working copies --------------------------------------------
-    local_branch = _gauge(
-        "jq_local_branch_info",
-        "Always 1; the label carries the checked-out branch.",
-        ["repo", "branch"],
-    )
-    on_default = _gauge(
-        "jq_local_on_default_branch",
-        "1 if the clone sits on its default branch.",
-        ["repo"],
-    )
-    dirty = _gauge(
-        "jq_local_dirty_files",
-        "Tracked files with uncommitted changes.",
-        ["repo"],
-    )
-    untracked = _gauge(
-        "jq_local_untracked_files",
-        "Untracked files in the working copy.",
-        ["repo"],
-    )
-    ahead = _gauge(
-        "jq_local_ahead_commits",
-        "Commits ahead of upstream, as of the last fetch.",
-        ["repo"],
-    )
-    behind_local = _gauge(
-        "jq_local_behind_commits",
-        "Commits behind upstream, as of the last fetch.",
-        ["repo"],
-    )
-    stashes = _gauge("jq_local_stash_entries", "Stash entries.", ["repo"])
-    last_commit = _gauge(
-        "jq_local_last_commit_timestamp_seconds",
-        "Unix time of HEAD's commit.",
-        ["repo"],
-    )
-    fetch_age = _gauge(
-        "jq_local_fetch_age_seconds",
-        "Seconds since this clone last fetched. Read the ahead/behind counts against this.",
-        ["repo"],
-    )
-    local_ref = _gauge(
-        "jq_local_template_ref_info",
-        "Always 1; the ref pinned in the *clone's* pointer. May lag the repo's.",
-        ["repo", "ref"],
-    )
-    synced = _gauge(
-        "jq_local_default_branch_synced",
-        "1 if the local default branch is the same commit GitHub reports. Fetch-independent.",
-        ["repo"],
-    )
+        # -- CI on the default branch ----------------------------------------
+        self.ci_info = _gauge(
+            "jq_ci_last_run_info",
+            "Always 1; labels carry the last completed default-branch run.",
+            ["repo", "conclusion", "workflow", "url"],
+        )
+        self.ci_ok = _gauge(
+            "jq_ci_last_run_success",
+            "1 if the last completed default-branch run passed.",
+            ["repo"],
+        )
+        self.ci_at = _gauge(
+            "jq_ci_last_run_timestamp_seconds",
+            "Unix time that run finished.",
+            ["repo"],
+        )
+        self.ci_dur = _gauge("jq_ci_last_run_duration_seconds", "How long that run took.", ["repo"])
+        self.wf_ok = _gauge(
+            "jq_ci_workflow_success",
+            "Per workflow: 1 if its latest completed default-branch run passed.",
+            ["repo", "workflow"],
+        )
+        self.wf_at = _gauge(
+            "jq_ci_workflow_timestamp_seconds",
+            "Per workflow: when that run finished.",
+            ["repo", "workflow"],
+        )
+        # Its own family rather than a label on jq_ci_workflow_success, which is a
+        # real gauge with 180 days behind it - adding a label there would start a
+        # new series and orphan all of it.
+        self.wf_info = _gauge(
+            "jq_ci_workflow_info",
+            "Always 1; the label carries the URL of that workflow's latest run.",
+            ["repo", "workflow", "url"],
+        )
+        self.coverage = _gauge(
+            "jq_ci_coverage_percent",
+            "Line coverage from the newest default-branch coverage-report artifact. "
+            "Absent when the repo publishes none.",
+            ["repo"],
+        )
+        self.coverage_lines = _gauge(
+            "jq_ci_coverage_lines",
+            "Lines CI measured for that coverage figure. The percentage is not "
+            "interpretable without it, and its denominator is not jq_local_code_lines.",
+            ["repo"],
+        )
+        self.wf_failing = _gauge(
+            "jq_ci_workflows_failing",
+            "How many of the repo's workflows are red on the default branch.",
+            ["repo"],
+        )
 
-    # -- size and cadence -------------------------------------------------
-    # Lines are counted in the working copy, commits on the default branch.
-    # Re-measured only when the clone moves, so these are flat between commits
-    # by design rather than by a stuck collector.
-    code_lines = _gauge(
-        "jq_local_code_lines",
-        "Lines of tracked source outside the test tree, in the working copy.",
-        ["repo"],
-    )
-    test_lines = _gauge(
-        "jq_local_test_lines",
-        "Lines of tracked source under the test tree, in the working copy.",
-        ["repo"],
-    )
-    commits_30d = _gauge(
-        "jq_local_commits_30d",
-        "Commits on the default branch in the last 30 days.",
-        ["repo"],
-    )
-    since_release = _gauge(
-        "jq_local_commits_since_release",
-        "Commits on the default branch since the newest tag. Absent when the clone has no tags.",
-        ["repo"],
-    )
-    release_info = _gauge(
-        "jq_local_last_release_info",
-        "Always 1; the label carries the newest tag reachable in the clone.",
-        ["repo", "ref"],
-    )
+        # -- pull requests ---------------------------------------------------
+        self.pr_count = _gauge("jq_open_pull_requests", "Open pull requests.", ["repo"])
+        self.issue_count = _gauge(
+            "jq_open_issues",
+            "Open issues, excluding pull requests.",
+            ["repo"],
+        )
+        self.pr_failing = _gauge(
+            "jq_open_pull_requests_failing",
+            "Open pull requests whose checks are red.",
+            ["repo"],
+        )
+        self.pr_info = _gauge(
+            "jq_pull_request_info",
+            "Always 1; one series per open pull request.",
+            ["repo", "number", "title", "author", "checks", "draft", "url"],
+        )
+        self.merged_at = _gauge(
+            "jq_merged_pull_request_timestamp_seconds",
+            "Unix time a pull request was merged. topk() over this gives the newest.",
+            ["repo", "number", "title", "author"],
+        )
+        # The URL rides on its own family rather than on the timestamp above,
+        # because that timestamp *is* the merged-PR timeline - the history the
+        # "Recently merged" panel reads. A label there would have orphaned every
+        # existing series and, until they went stale, shown each merged PR twice.
+        self.merged_info = _gauge(
+            "jq_merged_pull_request_info",
+            "Always 1; the label carries the merged pull request's URL.",
+            ["repo", "number", "url"],
+        )
+        self.pr_created = _gauge(
+            "jq_pull_request_created_timestamp_seconds",
+            "Unix time the pull request was opened.",
+            ["repo", "number"],
+        )
 
-    for key in keys:
-        remote = snap.remote.get(key)
-        local = snap.local.get(key)
-        # rpartition, not partition: a GitLab namespace nests, so the owner is
-        # everything before the last slash rather than the first segment.
-        owner = key.rpartition("/")[0]
-        ident = [key]
+        # -- local working copies --------------------------------------------
+        self.local_branch = _gauge(
+            "jq_local_branch_info",
+            "Always 1; the label carries the checked-out branch.",
+            ["repo", "branch"],
+        )
+        self.on_default = _gauge(
+            "jq_local_on_default_branch",
+            "1 if the clone sits on its default branch.",
+            ["repo"],
+        )
+        self.dirty = _gauge(
+            "jq_local_dirty_files",
+            "Tracked files with uncommitted changes.",
+            ["repo"],
+        )
+        self.untracked = _gauge(
+            "jq_local_untracked_files",
+            "Untracked files in the working copy.",
+            ["repo"],
+        )
+        self.ahead = _gauge(
+            "jq_local_ahead_commits",
+            "Commits ahead of upstream, as of the last fetch.",
+            ["repo"],
+        )
+        self.behind_local = _gauge(
+            "jq_local_behind_commits",
+            "Commits behind upstream, as of the last fetch.",
+            ["repo"],
+        )
+        self.stashes = _gauge("jq_local_stash_entries", "Stash entries.", ["repo"])
+        self.last_commit = _gauge(
+            "jq_local_last_commit_timestamp_seconds",
+            "Unix time of HEAD's commit.",
+            ["repo"],
+        )
+        self.fetch_age = _gauge(
+            "jq_local_fetch_age_seconds",
+            "Seconds since this clone last fetched. Read the ahead/behind counts against this.",
+            ["repo"],
+        )
+        self.local_ref = _gauge(
+            "jq_local_template_ref_info",
+            "Always 1; the ref pinned in the *clone's* pointer. May lag the repo's.",
+            ["repo", "ref"],
+        )
+        self.synced = _gauge(
+            "jq_local_default_branch_synced",
+            "1 if the local default branch is the same commit GitHub reports. Fetch-independent.",
+            ["repo"],
+        )
 
-        default_branch = remote.default_branch if remote else "main"
-        repo_info.add_metric(
+        # -- size and cadence -------------------------------------------------
+        # Lines are counted in the working copy, commits on the default branch.
+        # Re-measured only when the clone moves, so these are flat between commits
+        # by design rather than by a stuck collector.
+        self.code_lines = _gauge(
+            "jq_local_code_lines",
+            "Lines of tracked source outside the test tree, in the working copy.",
+            ["repo"],
+        )
+        self.test_lines = _gauge(
+            "jq_local_test_lines",
+            "Lines of tracked source under the test tree, in the working copy.",
+            ["repo"],
+        )
+        self.commits_30d = _gauge(
+            "jq_local_commits_30d",
+            "Commits on the default branch in the last 30 days.",
+            ["repo"],
+        )
+        self.since_release = _gauge(
+            "jq_local_commits_since_release",
+            "Commits on the default branch since the newest tag. Absent when the clone has no tags.",
+            ["repo"],
+        )
+        self.release_info = _gauge(
+            "jq_local_last_release_info",
+            "Always 1; the label carries the newest tag reachable in the clone.",
+            ["repo", "ref"],
+        )
+
+    def in_exposition_order(self) -> tuple[GaugeMetricFamily, ...]:
+        return (
+            self.repo_info,
+            self.cloned,
+            self.pushed,
+            self.managed,
+            self.protected,
+            self.required_reviews,
+            self.force_push,
+            self.alerts_enabled,
+            self.alerts,
+            self.ref_info,
+            self.behind,
+            self.ci_info,
+            self.ci_ok,
+            self.ci_at,
+            self.ci_dur,
+            self.wf_ok,
+            self.wf_at,
+            self.wf_info,
+            self.wf_failing,
+            self.coverage,
+            self.coverage_lines,
+            self.pr_count,
+            self.issue_count,
+            self.pr_failing,
+            self.pr_info,
+            self.pr_created,
+            self.merged_at,
+            self.merged_info,
+            self.local_branch,
+            self.on_default,
+            self.dirty,
+            self.untracked,
+            self.ahead,
+            self.behind_local,
+            self.stashes,
+            self.last_commit,
+            self.fetch_age,
+            self.local_ref,
+            self.synced,
+            self.code_lines,
+            self.test_lines,
+            self.commits_30d,
+            self.since_release,
+            self.release_info,
+        )
+
+
+def _add_identity(
+    f: _Families, key: str, remote: RemoteRepo | None, local: LocalRepo | None
+) -> None:
+    # rpartition, not partition: a GitLab namespace nests, so the owner is
+    # everything before the last slash rather than the first segment.
+    owner = key.rpartition("/")[0]
+    f.repo_info.add_metric(
+        [
+            key,
+            owner,
+            _default_branch(remote),
+            remote.visibility if remote else "unknown",
+            remote.forge if remote else "github",
+            remote.url if remote else "",
+            remote.pulls_url if remote else "",
+        ],
+        1,
+    )
+    f.cloned.add_metric([key], 1 if local else 0)
+
+
+def _default_branch(remote: RemoteRepo | None) -> str:
+    return remote.default_branch if remote else "main"
+
+
+def _add_remote(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    f.pushed.add_metric(ident, remote.pushed_at)
+    _add_protection(f, ident, remote)
+    _add_alerts(f, ident, remote)
+    _add_drift(f, ident, remote)
+    _add_ci(f, ident, remote)
+    _add_pulls(f, ident, remote)
+    _add_merged(f, ident, remote)
+
+
+def _add_protection(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    if remote.protected is not None:
+        f.protected.add_metric(ident, 1 if remote.protected else 0)
+        f.required_reviews.add_metric(ident, remote.required_reviews)
+        f.force_push.add_metric(ident, 1 if remote.allows_force_push else 0)
+
+
+def _add_alerts(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    f.alerts_enabled.add_metric(ident, 1 if remote.alerts_enabled else 0)
+    if remote.alerts_enabled:
+        # Zero-fill the severities GitHub uses, so a repo that has just
+        # cleared its criticals reads as 0 rather than dropping out of
+        # the query and leaving the last non-zero value on the graph.
+        counts = dict(remote.alerts)
+        for severity in ("critical", "high", "medium", "low"):
+            f.alerts.add_metric([*ident, severity], counts.pop(severity, 0))
+        for severity, count in sorted(counts.items()):
+            f.alerts.add_metric([*ident, severity], count)
+
+
+def _add_drift(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    f.managed.add_metric(ident, 1 if remote.rhiza_managed else 0)
+    if remote.rhiza_ref:
+        f.ref_info.add_metric([*ident, remote.rhiza_ref], 1)
+    if remote.rhiza_behind is not None:
+        f.behind.add_metric(ident, remote.rhiza_behind)
+
+
+def _latest_per_workflow(workflows: tuple[WorkflowRun, ...]) -> dict[str, WorkflowRun]:
+    # Collapse workflows sharing a name, newest run winning. github.py
+    # already guarantees one per name, but this layer owns the exposition
+    # contract: duplicate label sets are silently dropped by Prometheus
+    # ("samples with different value but same timestamp"), which cost 16
+    # samples a scrape when the invariant was last broken upstream.
+    unique: dict[str, WorkflowRun] = {}
+    for wf in sorted(workflows, key=lambda w: w.finished_at, reverse=True):
+        if wf.conclusion in _INCONCLUSIVE_CONCLUSIONS:
+            continue
+        if wf.conclusion and wf.name not in unique:
+            unique[wf.name] = wf
+    return unique
+
+
+def _add_ci(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    bad = 0
+    for wf in _latest_per_workflow(remote.workflows).values():
+        good = wf.conclusion in _GOOD_CONCLUSIONS
+        bad += 0 if good else 1
+        f.wf_ok.add_metric([*ident, wf.name], 1 if good else 0)
+        f.wf_at.add_metric([*ident, wf.name], wf.finished_at)
+        f.wf_info.add_metric([*ident, wf.name, wf.url], 1)
+
+    if remote.ci_conclusion and remote.ci_conclusion not in _INCONCLUSIVE_CONCLUSIONS:
+        f.ci_info.add_metric([*ident, remote.ci_conclusion, remote.ci_workflow, remote.ci_url], 1)
+        # Green only when no workflow is red. Deriving this from a single
+        # run made a repo look green whenever some other workflow had run
+        # more recently than the failing one.
+        f.ci_ok.add_metric(ident, 1 if bad == 0 else 0)
+        f.ci_at.add_metric(ident, remote.ci_finished_at)
+        f.ci_dur.add_metric(ident, remote.ci_duration)
+        f.wf_failing.add_metric(ident, bad)
+
+    # Absent, not zero, when there is no report. Zero would read as
+    # "nothing is covered", which is a finding; "nobody publishes a
+    # report here" is not one.
+    if remote.coverage is not None:
+        f.coverage.add_metric(ident, remote.coverage)
+        f.coverage_lines.add_metric(ident, remote.coverage_lines)
+
+
+def _add_pulls(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    f.pr_count.add_metric(ident, remote.open_pulls_total)
+    f.issue_count.add_metric(ident, remote.open_issues)
+    # Red means red. A cancelled check is no verdict - the same rule the
+    # default branch follows - so it does not make a pull request count
+    # as failing; the PR table still shows the word in its checks column.
+    f.pr_failing.add_metric(ident, sum(1 for p in remote.pulls if p.checks == "failure"))
+    for pull in remote.pulls:
+        number = str(pull.number)
+        f.pr_info.add_metric(
             [
-                key,
-                owner,
-                default_branch,
-                remote.visibility if remote else "unknown",
-                remote.forge if remote else "github",
-                remote.url if remote else "",
-                remote.pulls_url if remote else "",
+                *ident,
+                number,
+                pull.title,
+                pull.author,
+                pull.checks,
+                str(pull.draft).lower(),
+                pull.url,
             ],
             1,
         )
-        cloned.add_metric(ident, 1 if local else 0)
+        f.pr_created.add_metric([*ident, number], pull.created_at)
 
-        if remote is not None:
-            pushed.add_metric(ident, remote.pushed_at)
-            if remote.protected is not None:
-                protected.add_metric(ident, 1 if remote.protected else 0)
-                required_reviews.add_metric(ident, remote.required_reviews)
-                force_push.add_metric(ident, 1 if remote.allows_force_push else 0)
 
-            alerts_enabled.add_metric(ident, 1 if remote.alerts_enabled else 0)
-            if remote.alerts_enabled:
-                # Zero-fill the severities GitHub uses, so a repo that has just
-                # cleared its criticals reads as 0 rather than dropping out of
-                # the query and leaving the last non-zero value on the graph.
-                counts = dict(remote.alerts)
-                for severity in ("critical", "high", "medium", "low"):
-                    alerts.add_metric([*ident, severity], counts.pop(severity, 0))
-                for severity, count in sorted(counts.items()):
-                    alerts.add_metric([*ident, severity], count)
+def _add_merged(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    # One series per recently merged PR. The value is the merge time, so
+    # the board can take topk() across the fleet rather than needing a
+    # per-repo view. Deduped on number because a repo occasionally
+    # reports the same PR twice across a page boundary.
+    seen: set[int] = set()
+    for m in remote.merged:
+        if m.number in seen:
+            continue
+        seen.add(m.number)
+        f.merged_at.add_metric([*ident, str(m.number), m.title, m.author], m.merged_at)
+        f.merged_info.add_metric([*ident, str(m.number), m.url], 1)
 
-            managed.add_metric(ident, 1 if remote.rhiza_managed else 0)
-            if remote.rhiza_ref:
-                ref_info.add_metric([*ident, remote.rhiza_ref], 1)
-            if remote.rhiza_behind is not None:
-                behind.add_metric(ident, remote.rhiza_behind)
 
-            # Collapse workflows sharing a name, newest run winning. github.py
-            # already guarantees one per name, but this layer owns the exposition
-            # contract: duplicate label sets are silently dropped by Prometheus
-            # ("samples with different value but same timestamp"), which cost 16
-            # samples a scrape when the invariant was last broken upstream.
-            unique: dict[str, WorkflowRun] = {}
-            for wf in sorted(remote.workflows, key=lambda w: w.finished_at, reverse=True):
-                if wf.conclusion in _INCONCLUSIVE_CONCLUSIONS:
-                    continue
-                if wf.conclusion and wf.name not in unique:
-                    unique[wf.name] = wf
+def _add_local(f: _Families, ident: list[str], local: LocalRepo, remote: RemoteRepo | None) -> None:
+    f.local_branch.add_metric([*ident, local.branch or "unknown"], 1)
+    f.on_default.add_metric(ident, 1 if local.branch == _default_branch(remote) else 0)
+    f.dirty.add_metric(ident, local.dirty_files)
+    f.untracked.add_metric(ident, local.untracked_files)
+    if local.ahead is not None:
+        f.ahead.add_metric(ident, local.ahead)
+    if local.behind is not None:
+        f.behind_local.add_metric(ident, local.behind)
+    if local.rhiza_ref:
+        f.local_ref.add_metric([*ident, local.rhiza_ref], 1)
+    f.stashes.add_metric(ident, local.stashes)
+    f.last_commit.add_metric(ident, local.last_commit_at)
+    if local.fetch_age is not None:
+        f.fetch_age.add_metric(ident, local.fetch_age)
+    if local.default_branch_sha and remote and remote.head_sha:
+        f.synced.add_metric(ident, 1 if local.default_branch_sha == remote.head_sha else 0)
+    _add_size(f, ident, local)
 
-            bad = 0
-            for wf in unique.values():
-                good = wf.conclusion in _GOOD_CONCLUSIONS
-                bad += 0 if good else 1
-                wf_ok.add_metric([*ident, wf.name], 1 if good else 0)
-                wf_at.add_metric([*ident, wf.name], wf.finished_at)
-                wf_info.add_metric([*ident, wf.name, wf.url], 1)
 
-            if remote.ci_conclusion and remote.ci_conclusion not in _INCONCLUSIVE_CONCLUSIONS:
-                ci_info.add_metric(
-                    [*ident, remote.ci_conclusion, remote.ci_workflow, remote.ci_url], 1
-                )
-                # Green only when no workflow is red. Deriving this from a single
-                # run made a repo look green whenever some other workflow had run
-                # more recently than the failing one.
-                ci_ok.add_metric(ident, 1 if bad == 0 else 0)
-                ci_at.add_metric(ident, remote.ci_finished_at)
-                ci_dur.add_metric(ident, remote.ci_duration)
-                wf_failing.add_metric(ident, bad)
-
-            # Absent, not zero, when there is no report. Zero would read as
-            # "nothing is covered", which is a finding; "nobody publishes a
-            # report here" is not one.
-            if remote.coverage is not None:
-                coverage.add_metric(ident, remote.coverage)
-                coverage_lines.add_metric(ident, remote.coverage_lines)
-
-            pr_count.add_metric(ident, remote.open_pulls_total)
-            issue_count.add_metric(ident, remote.open_issues)
-            # Red means red. A cancelled check is no verdict - the same rule the
-            # default branch follows - so it does not make a pull request count
-            # as failing; the PR table still shows the word in its checks column.
-            pr_failing.add_metric(ident, sum(1 for p in remote.pulls if p.checks == "failure"))
-            for pull in remote.pulls:
-                number = str(pull.number)
-                pr_info.add_metric(
-                    [
-                        *ident,
-                        number,
-                        pull.title,
-                        pull.author,
-                        pull.checks,
-                        str(pull.draft).lower(),
-                        pull.url,
-                    ],
-                    1,
-                )
-                pr_created.add_metric([*ident, number], pull.created_at)
-
-            # One series per recently merged PR. The value is the merge time, so
-            # the board can take topk() across the fleet rather than needing a
-            # per-repo view. Deduped on number because a repo occasionally
-            # reports the same PR twice across a page boundary.
-            seen: set[int] = set()
-            for m in remote.merged:
-                if m.number in seen:
-                    continue
-                seen.add(m.number)
-                merged_at.add_metric([*ident, str(m.number), m.title, m.author], m.merged_at)
-                merged_info.add_metric([*ident, str(m.number), m.url], 1)
-
-        if local is not None:
-            local_branch.add_metric([*ident, local.branch or "unknown"], 1)
-            on_default.add_metric(ident, 1 if local.branch == default_branch else 0)
-            dirty.add_metric(ident, local.dirty_files)
-            untracked.add_metric(ident, local.untracked_files)
-            if local.ahead is not None:
-                ahead.add_metric(ident, local.ahead)
-            if local.behind is not None:
-                behind_local.add_metric(ident, local.behind)
-            if local.rhiza_ref:
-                local_ref.add_metric([*ident, local.rhiza_ref], 1)
-            stashes.add_metric(ident, local.stashes)
-            last_commit.add_metric(ident, local.last_commit_at)
-            if local.fetch_age is not None:
-                fetch_age.add_metric(ident, local.fetch_age)
-            if local.default_branch_sha and remote and remote.head_sha:
-                synced.add_metric(ident, 1 if local.default_branch_sha == remote.head_sha else 0)
-
-            code_lines.add_metric(ident, local.code_lines)
-            test_lines.add_metric(ident, local.test_lines)
-            commits_30d.add_metric(ident, local.commits_30d)
-            # Absent, not zero, when the repo has never been tagged. Zero here
-            # would read as "nothing unreleased", the opposite of the truth.
-            if local.commits_since_release is not None:
-                since_release.add_metric(ident, local.commits_since_release)
-            if local.last_release:
-                release_info.add_metric([*ident, local.last_release], 1)
-
-    yield from (
-        repo_info,
-        cloned,
-        pushed,
-        managed,
-        protected,
-        required_reviews,
-        force_push,
-        alerts_enabled,
-        alerts,
-        ref_info,
-        behind,
-        ci_info,
-        ci_ok,
-        ci_at,
-        ci_dur,
-        wf_ok,
-        wf_at,
-        wf_info,
-        wf_failing,
-        coverage,
-        coverage_lines,
-        pr_count,
-        issue_count,
-        pr_failing,
-        pr_info,
-        pr_created,
-        merged_at,
-        merged_info,
-        local_branch,
-        on_default,
-        dirty,
-        untracked,
-        ahead,
-        behind_local,
-        stashes,
-        last_commit,
-        fetch_age,
-        local_ref,
-        synced,
-        code_lines,
-        test_lines,
-        commits_30d,
-        since_release,
-        release_info,
-    )
+def _add_size(f: _Families, ident: list[str], local: LocalRepo) -> None:
+    f.code_lines.add_metric(ident, local.code_lines)
+    f.test_lines.add_metric(ident, local.test_lines)
+    f.commits_30d.add_metric(ident, local.commits_30d)
+    # Absent, not zero, when the repo has never been tagged. Zero here
+    # would read as "nothing unreleased", the opposite of the truth.
+    if local.commits_since_release is not None:
+        f.since_release.add_metric(ident, local.commits_since_release)
+    if local.last_release:
+        f.release_info.add_metric([*ident, local.last_release], 1)
 
 
 class FleetCollector:

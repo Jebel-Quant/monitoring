@@ -310,36 +310,14 @@ class GitHub:
             exclude_pull_requests="true",
             per_page=100,
         )
-        newest: dict[Any, dict] = {}
         feed = data.get("workflow_runs") if isinstance(data, dict) else None
-        for run in feed or []:
-            wid = run.get("workflow_id")
-            if active is not None and wid not in active:
-                continue  # workflow deleted or disabled since this run
-            if _inconclusive(run):
-                continue  # cancelled or stale: no verdict to report
-            key = wid if wid is not None else run.get("name")
-            current = newest.get(key)
-            if current is None or _ts(run.get("updated_at")) > _ts(current.get("updated_at")):
-                newest[key] = run
+        newest = _newest_per_workflow(feed or [], active)
 
         # One targeted call per workflow the feed missed. Quiet repos pay
         # nothing; only the busy ones do, and only for what was actually hidden.
-        if active is not None:
-            for wid in active:
-                if wid in newest:
-                    continue
-                extra = self._json(
-                    f"/repos/{full_name}/actions/workflows/{wid}/runs",
-                    branch=branch,
-                    status="completed",
-                    exclude_pull_requests="true",
-                    # More than one, because the newest run may be a cancelled
-                    # one; the API has no "conclusive only" filter.
-                    per_page=5,
-                )
-                runs = (extra.get("workflow_runs") if isinstance(extra, dict) else None) or []
-                conclusive = next((r for r in runs if not _inconclusive(r)), None)
+        for wid in active or ():
+            if wid not in newest:
+                conclusive = self._newest_conclusive(full_name, branch, wid)
                 if conclusive is not None:
                     newest[wid] = conclusive
 
@@ -347,6 +325,20 @@ class GitHub:
             {**run, "_name": (active or {}).get(wid) or run.get("name") or "unnamed"}
             for wid, run in newest.items()
         ]
+
+    def _newest_conclusive(self, full_name: str, branch: str, wid: int) -> dict | None:
+        """The newest run of one workflow that reached a verdict, if any."""
+        extra = self._json(
+            f"/repos/{full_name}/actions/workflows/{wid}/runs",
+            branch=branch,
+            status="completed",
+            exclude_pull_requests="true",
+            # More than one, because the newest run may be a cancelled
+            # one; the API has no "conclusive only" filter.
+            per_page=5,
+        )
+        runs = (extra.get("workflow_runs") if isinstance(extra, dict) else None) or []
+        return next((r for r in runs if not _inconclusive(r)), None)
 
     def coverage_artifact(self, full_name: str, branch: str) -> int:
         """Id of the newest ``coverage-report`` artifact built on ``branch``.
@@ -497,6 +489,25 @@ def _coverage(blob: bytes) -> tuple[float, int] | None:
     if rate is None:
         return None
     return round(float(rate) * 100, 1), int(root.get("lines-valid") or 0)
+
+
+def _newest_per_workflow(feed: list[dict], active: dict[int, str] | None) -> dict[Any, dict]:
+    """The runs feed reduced to the newest conclusive run per active workflow.
+
+    Keyed on workflow id, or on the run's name for a run that carries none.
+    """
+    newest: dict[Any, dict] = {}
+    for run in feed:
+        wid = run.get("workflow_id")
+        if active is not None and wid not in active:
+            continue  # workflow deleted or disabled since this run
+        if _inconclusive(run):
+            continue  # cancelled or stale: no verdict to report
+        key = wid if wid is not None else run.get("name")
+        current = newest.get(key)
+        if current is None or _ts(run.get("updated_at")) > _ts(current.get("updated_at")):
+            newest[key] = run
+    return newest
 
 
 def _inconclusive(run: dict) -> bool:

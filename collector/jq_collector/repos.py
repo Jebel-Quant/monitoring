@@ -311,15 +311,8 @@ def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None, str]
     return parsed.full_name, path, declared or parsed.forge
 
 
-def load(
-    source: str, host_root: str = ""
-) -> tuple[tuple[str, ...], dict[str, str], dict[str, str]]:
-    """Read ``repos.yml`` into ``(fleet, checkout paths, forge per repo)``.
-
-    The fleet is every listed repo as ``namespace/name``; the paths map holds
-    only those with a checkout this machine can actually read; the forge map
-    says which API each one is read through.
-    """
+def _read_entries(source: str) -> list:
+    """The non-empty ``repos:`` list of ``source``, or a FleetError saying why not."""
     import yaml
 
     try:
@@ -336,6 +329,33 @@ def load(
     entries = data.get("repos") if isinstance(data, dict) else None
     if not isinstance(entries, list) or not entries:
         raise FleetError(f"{source} lists no repos under a top-level `repos:` key")
+    return entries
+
+
+def _listed_twice(
+    full_name: str, first: tuple[str, str | None], second: tuple[str, str | None]
+) -> FleetError:
+    """The refusal for a repo two entries both name, as ``(forge, path)`` each."""
+    (clash, first_path), (forge, path) = first, second
+    if clash != forge:
+        detail = f" - on {clash} and on {forge}"
+    elif first_path and path and first_path != path:
+        detail = f" - checked out at {first_path} and at {path}"
+    else:
+        detail = ""
+    return FleetError(f"{full_name} is listed twice{detail}")
+
+
+def load(
+    source: str, host_root: str = ""
+) -> tuple[tuple[str, ...], dict[str, str], dict[str, str]]:
+    """Read ``repos.yml`` into ``(fleet, checkout paths, forge per repo)``.
+
+    The fleet is every listed repo as ``namespace/name``; the paths map holds
+    only those with a checkout this machine can actually read; the forge map
+    says which API each one is read through.
+    """
+    entries = _read_entries(source)
 
     fleet: list[str] = []
     paths: dict[str, str] = {}
@@ -387,14 +407,9 @@ def load(
                 # is the same choice the duplicate case has always made: a merged
                 # pair would report one repo's CI under the other's name, and read
                 # as a working board while doing it.
-                clash, first = forges[full_name], paths.get(full_name)
-                if clash != forge:
-                    detail = f" - on {clash} and on {forge}"
-                elif first and path and first != path:
-                    detail = f" - checked out at {first} and at {path}"
-                else:
-                    detail = ""
-                raise FleetError(f"{full_name} is listed twice{detail}")
+                raise _listed_twice(
+                    full_name, (forges[full_name], paths.get(full_name)), (forge, path)
+                )
 
             fleet.append(full_name)
             forges[full_name] = forge
