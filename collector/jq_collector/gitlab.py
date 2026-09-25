@@ -40,6 +40,7 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 from datetime import datetime
+from typing import Any
 from urllib.parse import quote
 
 import httpx
@@ -107,7 +108,8 @@ class GitLab:
         response = self._get(path, **params)
         if response is None:
             return None
-        return response.json()
+        payload: object = response.json()
+        return payload
 
     def _get(self, path: str, **params: str | int) -> httpx.Response | None:
         """GET, or None for the statuses a real fleet legitimately produces."""
@@ -127,8 +129,8 @@ class GitLab:
         response = self._get(path, **params)
         return response.text if response is not None else None
 
-    def _paginate(self, path: str, **params: str | int) -> list[dict]:
-        items: list[dict] = []
+    def _paginate(self, path: str, **params: str | int) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
         page = 1
         while True:
             batch = self._json(path, per_page=_PER_PAGE, page=page, **params)
@@ -144,14 +146,14 @@ class GitLab:
 
     # -- fleet-level -----------------------------------------------------
 
-    def list_projects(self, fleet: tuple[str, ...]) -> list[dict]:
+    def list_projects(self, fleet: tuple[str, ...]) -> list[dict[str, Any]]:
         """The projects named in the config, in the order they were listed.
 
         One call each, no group sweep - the same contract as
         ``github.GitHub.list_repos``, and for the same reason: the board's
         contents are decided by repos.yml and by nothing else.
         """
-        projects: list[dict] = []
+        projects: list[dict[str, Any]] = []
         seen: set[str] = set()
 
         for full_name in fleet:
@@ -170,7 +172,7 @@ class GitLab:
 
         return projects
 
-    def protected_branch(self, full_name: str, branch: str) -> dict | None:
+    def protected_branch(self, full_name: str, branch: str) -> dict[str, Any] | None:
         """The branch's protection entry, or None if it is not protected.
 
         Unlike GitHub's, this endpoint needs no admin rights, so there is no
@@ -208,7 +210,7 @@ class GitLab:
             return ""
         return str(data.get("ref") or "") if isinstance(data, dict) else ""
 
-    def latest_pipeline(self, full_name: str, branch: str) -> dict | None:
+    def latest_pipeline(self, full_name: str, branch: str) -> dict[str, Any] | None:
         """The newest pipeline on *branch*, with its coverage.
 
         The listing carries a status but not coverage, so the one worth having
@@ -229,7 +231,7 @@ class GitLab:
         full = self._json(f"/projects/{_pid(full_name)}/pipelines/{pipeline_id}")
         return full if isinstance(full, dict) else listing[0]
 
-    def pipeline_jobs(self, full_name: str, pipeline_id: int) -> list[dict]:
+    def pipeline_jobs(self, full_name: str, pipeline_id: int) -> list[dict[str, Any]]:
         """Every job in one pipeline.
 
         A GitLab pipeline is one run containing many jobs, where GitHub has many
@@ -350,7 +352,7 @@ def _checks_state(status: str | None) -> str:
     return "none"
 
 
-def _visibility(raw: dict) -> str:
+def _visibility(raw: dict[str, Any]) -> str:
     """The project's visibility: ``public``, ``internal`` or ``private``.
 
     Named rather than inlined because ``public_only`` tests it too, and
@@ -360,7 +362,7 @@ def _visibility(raw: dict) -> str:
     return raw.get("visibility") or "unknown"
 
 
-def _protection(entry: dict | None) -> tuple[bool | None, bool, int]:
+def _protection(entry: dict[str, Any] | None) -> tuple[bool | None, bool, int]:
     """``(protected, allows_force_push, required_reviews)`` from one entry.
 
     ``protected`` is never None on GitLab. GitHub's third state exists because
@@ -421,7 +423,7 @@ def collect(
     )
     projects = [r for r in listing if r["path_with_namespace"] not in excluded]
 
-    def one(raw: dict) -> RemoteRepo:
+    def one(raw: dict[str, Any]) -> RemoteRepo:
         full_name = raw["path_with_namespace"]
         branch = raw.get("default_branch") or "main"
         head_sha = api.branch_sha(full_name, branch)

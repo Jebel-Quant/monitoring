@@ -112,7 +112,8 @@ class GitHub:
             log.info("%s -> %s", path, response.status_code)
             return None
         response.raise_for_status()
-        return response.json()
+        payload: object = response.json()
+        return payload
 
     def _bytes(self, path: str) -> bytes | None:
         """GET returning raw bytes. 410 is added to the expected empties: that
@@ -125,8 +126,8 @@ class GitHub:
         response.raise_for_status()
         return response.content
 
-    def _paginate(self, path: str, **params: str | int) -> list[dict]:
-        items: list[dict] = []
+    def _paginate(self, path: str, **params: str | int) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
         page = 1
         while True:
             batch = self._json(path, per_page=100, page=page, **params)
@@ -142,7 +143,7 @@ class GitHub:
 
     # -- fleet-level -----------------------------------------------------
 
-    def list_repos(self, fleet: tuple[str, ...] | None = None) -> list[dict]:
+    def list_repos(self, fleet: tuple[str, ...] | None = None) -> list[dict[str, Any]]:
         """The repos named in the config, in the order they were listed.
 
         One call each, and no org sweep: the fleet is whatever you wrote down.
@@ -153,7 +154,7 @@ class GitHub:
         GitLab repo in a mixed fleet would be asked of GitHub, which answers 404
         and logs each one as unreadable.
         """
-        repos: list[dict] = []
+        repos: list[dict[str, Any]] = []
         seen: set[str] = set()
 
         for full_name in fleet if fleet is not None else self._cfg.repos:
@@ -171,7 +172,7 @@ class GitHub:
 
         return repos
 
-    def branch_protection(self, full_name: str, branch: str) -> tuple[dict | None, bool]:
+    def branch_protection(self, full_name: str, branch: str) -> tuple[dict[str, Any] | None, bool]:
         """``(protection, known)`` for one branch.
 
         The endpoint 404s both for an unprotected branch and for a token
@@ -284,7 +285,7 @@ class GitHub:
                 seen[name] = wid
         return active
 
-    def latest_runs(self, full_name: str, branch: str) -> list[dict]:
+    def latest_runs(self, full_name: str, branch: str) -> list[dict[str, Any]]:
         """The newest completed run of each active workflow on ``branch``.
 
         The runs feed is ordered by ``created_at`` and is not a per-workflow
@@ -326,7 +327,7 @@ class GitHub:
             for wid, run in newest.items()
         ]
 
-    def _newest_conclusive(self, full_name: str, branch: str, wid: int) -> dict | None:
+    def _newest_conclusive(self, full_name: str, branch: str, wid: int) -> dict[str, Any] | None:
         """The newest run of one workflow that reached a verdict, if any."""
         extra = self._json(
             f"/repos/{full_name}/actions/workflows/{wid}/runs",
@@ -491,12 +492,14 @@ def _coverage(blob: bytes) -> tuple[float, int] | None:
     return round(float(rate) * 100, 1), int(root.get("lines-valid") or 0)
 
 
-def _newest_per_workflow(feed: list[dict], active: dict[int, str] | None) -> dict[Any, dict]:
+def _newest_per_workflow(
+    feed: list[dict[str, Any]], active: dict[int, str] | None
+) -> dict[Any, dict[str, Any]]:
     """The runs feed reduced to the newest conclusive run per active workflow.
 
     Keyed on workflow id, or on the run's name for a run that carries none.
     """
-    newest: dict[Any, dict] = {}
+    newest: dict[Any, dict[str, Any]] = {}
     for run in feed:
         wid = run.get("workflow_id")
         if active is not None and wid not in active:
@@ -510,7 +513,7 @@ def _newest_per_workflow(feed: list[dict], active: dict[int, str] | None) -> dic
     return newest
 
 
-def _inconclusive(run: dict) -> bool:
+def _inconclusive(run: dict[str, Any]) -> bool:
     return (run.get("conclusion") or "") in INCONCLUSIVE_CONCLUSIONS
 
 
@@ -581,7 +584,7 @@ def collect(
     )
     repos = [r for r in listing if r["full_name"] not in excluded]
 
-    def one(raw: dict) -> RemoteRepo:
+    def one(raw: dict[str, Any]) -> RemoteRepo:
         full_name = raw["full_name"]
         owner = (raw.get("owner") or {}).get("login") or full_name.split("/", 1)[0]
         branch = raw.get("default_branch") or "main"
