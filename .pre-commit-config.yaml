@@ -1,0 +1,101 @@
+# Adapted from the jebel-quant/rhiza repository
+# (https://github.com/jebel-quant/rhiza), for a repo that is not rhiza-managed
+# and keeps its Python project in collector/ rather than at the root. What was
+# dropped or rescoped, and why:
+#
+# - rhiza-hooks (check-rhiza-config and friends): they validate .rhiza/, which
+#   this repo does not have.
+# - check-jsonschema for template-bundles.yml and check-renovate: neither file
+#   exists here.
+# - interrogate: rhiza's hook reads [tool.interrogate], and without that table
+#   interrogate falls back to its own defaults - a standard nobody here chose.
+#   Add the table first if docstring coverage should be gated.
+# - bandit: rhiza passes --ini .bandit; here it is scoped to the package by path
+#   instead, since the tests assert freely and that is not a finding.
+# - ruff is pinned to the version in collector/uv.lock, which is what CI runs,
+#   so the hook and the Lint step cannot disagree. Bump both together.
+# - uv-lock points at collector/, where the lock lives.
+#
+# Pin node so pre-commit provisions a compatible runtime instead of using the
+# system node. Some npm-based hooks (markdownlint-cli) pull transitive deps that
+# reject odd-numbered current node releases (e.g. v25), failing on EBADENGINE.
+default_language_version:
+  node: "24.12.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-toml
+      - id: check-yaml
+        args: ['--unsafe']
+
+  - repo: local
+    hooks:
+      - id: no-python-cache-files
+        name: Prevent committing Python cache files
+        language: fail
+        entry: Python cache files (__pycache__, .pyc, .pyo, .pyd) must not be committed.
+        files: '(/__pycache__/|\.py[cod]$)'
+
+      - id: no-rej-files
+        name: Reject .rej files
+        entry: "bash -c 'find . -type f -name \"*.rej\" | grep -q . && { echo \"ERROR: .rej files detected\"; find . -type f -name \"*.rej\"; exit 1; } || exit 0'"
+        language: system
+        pass_filenames: false
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 'v0.16.9'
+    hooks:
+      - id: ruff
+        args: [ --fix, --exit-non-zero-on-fix, --unsafe-fixes ]
+
+      # Run the formatter
+      - id: ruff-format
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.49.1
+    hooks:
+      - id: markdownlint
+        args: ["--disable", "MD013"]
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.38.0
+    hooks:
+      - id: check-github-workflows
+        args: ["--verbose"]
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/abravalheri/validate-pyproject
+    rev: "0.26"
+    hooks:
+      - id: validate-pyproject
+        files: ^collector/pyproject\.toml$
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        files: ^collector/jq_collector/.*\.py$
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        files: '\.sh$'
+
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: v1.8.1
+    hooks:
+      - id: betterleaks
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.10
+    hooks:
+      - id: uv-lock
+        args: [--project, collector]
+        files: ^collector/(pyproject\.toml|uv\.lock)$
