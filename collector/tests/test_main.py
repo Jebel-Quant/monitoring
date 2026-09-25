@@ -312,6 +312,23 @@ def test_main_warns_when_there_is_no_token(monkeypatch, caplog):
     assert "no GITHUB_TOKEN" in caplog.text
 
 
+def test_main_does_not_warn_when_a_token_is_set(monkeypatch, caplog):
+    """The warning is for the deployment that needs it; a set token is silent."""
+    monkeypatch.setattr(entry, "_refresh_remote", lambda *_: None)
+    monkeypatch.setattr(entry, "_tick_local", lambda *_: None)
+    monkeypatch.setattr(entry, "start_http_server", lambda _port: None)
+    monkeypatch.setattr(entry.REGISTRY, "register", lambda _c: None)
+    monkeypatch.setattr(entry.signal, "signal", lambda _sig, handler: handler(_sig, None))
+
+    cfg = Config()
+    object.__setattr__(cfg, "token", "ghp_test")
+    monkeypatch.setattr(entry, "Config", lambda: cfg)
+
+    entry.main()
+
+    assert "no GITHUB_TOKEN" not in caplog.text
+
+
 def test_main_starts_a_loop_per_source_and_shuts_them_down(monkeypatch):
     started: list[str] = []
     real_thread = threading.Thread

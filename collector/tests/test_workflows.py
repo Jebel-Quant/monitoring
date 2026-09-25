@@ -83,6 +83,23 @@ def test_latest_is_by_completion_not_feed_order(make_client):
     assert c.latest_runs("o/r", "main")[0]["conclusion"] == "failure"
 
 
+def test_an_older_run_later_in_the_feed_does_not_replace_a_newer_one(make_client):
+    """The mirror of the case above: when the feed does happen to put the newer
+    run first, the older one after it must not win just by coming last."""
+    c = make_client(
+        {
+            WFS: {"workflows": [workflow(1, "CI")]},
+            RUNS: {
+                "workflow_runs": [
+                    run(1, "CI", "failure", "2026-08-01T05:39:00Z"),
+                    run(1, "CI", "success", "2026-08-01T04:09:00Z"),
+                ]
+            },
+        }
+    )
+    assert c.latest_runs("o/r", "main")[0]["conclusion"] == "failure"
+
+
 def test_workflow_missing_from_the_feed_is_fetched_directly(make_client):
     """The feed's first page is dominated by frequent workflows. cvxgrp/simulator
     has 2406 runs on main and only 6 of its 23 workflows appear in the first 100;
@@ -143,6 +160,27 @@ def test_two_active_workflows_sharing_a_name_get_distinct_labels(make_client):
     )
     names = [r["_name"] for r in c.latest_runs("o/r", "main")]
     assert len(names) == len(set(names)), f"labels collide: {names}"
+
+
+def test_a_shared_name_with_no_path_to_fall_back_on_keeps_its_name(make_client):
+    """Only a workflow that has a path can be relabelled by it. One without
+    keeps its display name rather than being blanked, and the other still
+    moves to its path, so the labels stay distinct."""
+    pathless = workflow(1, "CI")
+    del pathless["path"]
+    c = make_client(
+        {
+            WFS: {"workflows": [pathless, workflow(2, "CI", path=".github/workflows/b.yml")]},
+            RUNS: {
+                "workflow_runs": [
+                    run(1, "CI", "success", "2026-08-01T00:00:00Z"),
+                    run(2, "CI", "failure", "2026-08-01T00:00:00Z"),
+                ]
+            },
+        }
+    )
+    got = {r["_name"]: r["conclusion"] for r in c.latest_runs("o/r", "main")}
+    assert got == {"CI": "success", ".github/workflows/b.yml": "failure"}
 
 
 def test_cancelled_run_falls_back_to_the_last_real_verdict(make_client):
