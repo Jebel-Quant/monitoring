@@ -96,7 +96,7 @@ class GitLab:
     def close(self) -> None:
         self._client.close()
 
-    def _json(self, path: str, **params: object) -> object | None:
+    def _json(self, path: str, **params: str | int) -> object | None:
         """GET returning parsed JSON, or None for the expected empty cases.
 
         The same three states the GitHub client tolerates, for the same reason:
@@ -109,7 +109,7 @@ class GitLab:
             return None
         return response.json()
 
-    def _get(self, path: str, **params: object) -> httpx.Response | None:
+    def _get(self, path: str, **params: str | int) -> httpx.Response | None:
         """GET, or None for the statuses a real fleet legitimately produces."""
         response = self._client.get(path, params=params or None)
         if response.status_code in (401, 403, 404):
@@ -118,7 +118,7 @@ class GitLab:
         response.raise_for_status()
         return response
 
-    def _text(self, path: str, **params: object) -> str | None:
+    def _text(self, path: str, **params: str | int) -> str | None:
         """GET returning the body as text, for the routes that serve a file.
 
         ``repository/files/.../raw`` answers with the file itself, so parsing it
@@ -127,7 +127,7 @@ class GitLab:
         response = self._get(path, **params)
         return response.text if response is not None else None
 
-    def _paginate(self, path: str, **params: object) -> list[dict]:
+    def _paginate(self, path: str, **params: str | int) -> list[dict]:
         items: list[dict] = []
         page = 1
         while True:

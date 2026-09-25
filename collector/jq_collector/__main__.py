@@ -65,7 +65,7 @@ def _refresh_remote(cfg: Config, store: Store) -> None:
     # (artifact id, percent) per repo: an unchanged artifact means the report
     # behind it is byte-identical, so there is nothing to gain from pulling the
     # zip down again. GitLab reports coverage as a field and ignores this.
-    coverage_cache = {
+    coverage_cache: dict[str, tuple[int, tuple[float, int] | None]] = {
         name: (repo.coverage_artifact, (repo.coverage, repo.coverage_lines))
         if repo.coverage is not None
         else (repo.coverage_artifact, None)

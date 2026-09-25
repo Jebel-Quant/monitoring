@@ -59,6 +59,11 @@ jobs:
       - name: Format
         run: uv run --frozen ruff format --check jq_collector tests
 
+      # Scope and target version live in [tool.mypy], so this line and a local
+      # `uv run mypy` cannot check different things.
+      - name: Types
+        run: uv run --frozen mypy
+
       - name: Tests
         run: |
           uv run --frozen python -m pytest \
