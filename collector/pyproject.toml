@@ -33,6 +33,10 @@ addopts = "-q --doctest-modules"
 # Coverage column reports against, and it is deliberately narrower than
 # jq_local_code_lines, which counts every tracked source file in the repo.
 source = ["jq_collector"]
+# Both arms of every branch, not just every line: an `if` whose false side
+# never runs is 100% line-covered and still untested. fail_under below then
+# holds lines and branches to the same floor.
+branch = true
 
 [tool.coverage.report]
 # The package is fully covered; this keeps it that way. pytest-cov reads it, so
