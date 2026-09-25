@@ -30,18 +30,20 @@ without the two colliding - which is exactly what the drill-down tables do.
 
 from __future__ import annotations
 
-from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+from collections.abc import Iterator
+
+from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily, Metric
 
 from .forge import GOOD_CONCLUSIONS as _GOOD_CONCLUSIONS
 from .forge import INCONCLUSIVE_CONCLUSIONS as _INCONCLUSIVE_CONCLUSIONS
-from .state import LocalRepo, RemoteRepo, Snapshot, WorkflowRun
+from .state import LocalRepo, RemoteRepo, Snapshot, Store, WorkflowRun
 
 
 def _gauge(name: str, doc: str, labels: list[str] | None = None) -> GaugeMetricFamily:
     return GaugeMetricFamily(name, doc, labels=labels or [])
 
 
-def render(snap: Snapshot):
+def render(snap: Snapshot) -> Iterator[Metric]:
     yield from _health(snap)
 
     f = _Families()
@@ -58,7 +60,7 @@ def render(snap: Snapshot):
     yield from f.in_exposition_order()
 
 
-def _health(snap: Snapshot):
+def _health(snap: Snapshot) -> Iterator[Metric]:
     """The fleet-wide families: collector health, the rate limit, the newest template."""
     # -- collector health ------------------------------------------------
     last_success = _gauge(
@@ -582,8 +584,8 @@ def _add_size(f: _Families, ident: list[str], local: LocalRepo) -> None:
 class FleetCollector:
     """Adapts the store to prometheus_client's collector interface."""
 
-    def __init__(self, store) -> None:
+    def __init__(self, store: Store) -> None:
         self._store = store
 
-    def collect(self):
+    def collect(self) -> Iterator[Metric]:
         yield from render(self._store.snapshot())
