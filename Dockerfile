@@ -49,8 +49,17 @@ COPY prometheus/prometheus.yml /etc/prometheus/prometheus.yml
 COPY grafana/provisioning /etc/grafana/provisioning
 COPY grafana/dashboards /etc/grafana/dashboards
 
+# Dependencies come from uv.lock, hash-checked, not from pyproject's lower
+# bounds - otherwise two builds of one commit can ship different libraries.
+# --locked makes a lock that has fallen behind pyproject.toml fail the build
+# instead of being quietly re-resolved. uv is mounted for this step only.
 COPY collector /src/collector
-RUN pip install --no-cache-dir /src/collector && rm -rf /src
+RUN --mount=from=ghcr.io/astral-sh/uv:0.11.28,source=/uv,target=/bin/uv \
+    uv export --locked --no-dev --no-emit-project --project /src/collector \
+      -o /tmp/requirements.txt \
+ && pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt \
+ && pip install --no-cache-dir --no-deps /src/collector \
+ && rm -rf /src /tmp/requirements.txt
 
 COPY image/entrypoint.sh /usr/local/bin/entrypoint
 COPY image/purge-repo.sh /usr/local/bin/purge-repo
