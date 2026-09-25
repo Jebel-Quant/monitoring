@@ -24,9 +24,14 @@ import logging
 import zipfile
 from datetime import datetime
 from typing import Any
-from xml.etree import ElementTree
 
 import httpx
+
+# coverage.xml comes out of another repo's CI artifact, so it is untrusted
+# input. defusedxml refuses entity declarations and external references, and
+# raises a ValueError subclass for them, which coverage_percent already treats
+# as a malformed report rather than a failed refresh.
+from defusedxml import ElementTree
 
 from .config import Config
 from .forge import GOOD_CONCLUSIONS, INCONCLUSIVE_CONCLUSIONS
