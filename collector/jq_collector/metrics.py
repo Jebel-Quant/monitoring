@@ -34,7 +34,7 @@ from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
 
 from .forge import GOOD_CONCLUSIONS as _GOOD_CONCLUSIONS
 from .forge import INCONCLUSIVE_CONCLUSIONS as _INCONCLUSIVE_CONCLUSIONS
-from .state import Snapshot
+from .state import Snapshot, WorkflowRun
 
 
 def _gauge(name: str, doc: str, labels: list[str] | None = None) -> GaugeMetricFamily:
@@ -386,7 +386,7 @@ def render(snap: Snapshot):
             # contract: duplicate label sets are silently dropped by Prometheus
             # ("samples with different value but same timestamp"), which cost 16
             # samples a scrape when the invariant was last broken upstream.
-            unique: dict[str, object] = {}
+            unique: dict[str, WorkflowRun] = {}
             for wf in sorted(remote.workflows, key=lambda w: w.finished_at, reverse=True):
                 if wf.conclusion in _INCONCLUSIVE_CONCLUSIONS:
                     continue

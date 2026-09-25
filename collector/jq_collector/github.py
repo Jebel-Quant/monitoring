@@ -23,6 +23,7 @@ import io
 import logging
 import zipfile
 from datetime import datetime
+from typing import Any
 from xml.etree import ElementTree
 
 import httpx
@@ -81,7 +82,7 @@ class GitHub:
     def close(self) -> None:
         self._client.close()
 
-    def _get(self, path: str, **params: object) -> httpx.Response:
+    def _get(self, path: str, **params: str | int) -> httpx.Response:
         response = self._client.get(path, params=params or None)
         self._note_rate_limit(response)
         return response
@@ -99,7 +100,7 @@ class GitHub:
                 except ValueError:
                     pass
 
-    def _json(self, path: str, **params: object) -> object | None:
+    def _json(self, path: str, **params: str | int) -> object | None:
         """GET returning parsed JSON, or None for the expected empty cases.
 
         404 (no such file), 403 (rate limited or forbidden) and 409 (empty
@@ -124,7 +125,7 @@ class GitHub:
         response.raise_for_status()
         return response.content
 
-    def _paginate(self, path: str, **params: object) -> list[dict]:
+    def _paginate(self, path: str, **params: str | int) -> list[dict]:
         items: list[dict] = []
         page = 1
         while True:
@@ -309,8 +310,9 @@ class GitHub:
             exclude_pull_requests="true",
             per_page=100,
         )
-        newest: dict[object, dict] = {}
-        for run in (data or {}).get("workflow_runs") or []:
+        newest: dict[Any, dict] = {}
+        feed = data.get("workflow_runs") if isinstance(data, dict) else None
+        for run in feed or []:
             wid = run.get("workflow_id")
             if active is not None and wid not in active:
                 continue  # workflow deleted or disabled since this run
@@ -336,7 +338,7 @@ class GitHub:
                     # one; the API has no "conclusive only" filter.
                     per_page=5,
                 )
-                runs = (extra or {}).get("workflow_runs") or []
+                runs = (extra.get("workflow_runs") if isinstance(extra, dict) else None) or []
                 conclusive = next((r for r in runs if not _inconclusive(r)), None)
                 if conclusive is not None:
                     newest[wid] = conclusive

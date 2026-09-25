@@ -33,6 +33,7 @@ import logging
 import os
 import subprocess
 import time
+from typing import TypedDict
 
 from . import origin
 from .config import Config
@@ -290,13 +291,25 @@ def scan_repo(
     )
 
 
+class _Measured(TypedDict):
+    """The ``LocalRepo`` fields ``_measurements`` fills, typed for ``**`` unpacking."""
+
+    code_lines: int
+    test_lines: int
+    commits_30d: int
+    commits_since_release: int | None
+    last_release: str
+    fingerprint: str
+    measured_at: float
+
+
 def _measurements(
     path: str,
     ref: str,
     cfg: Config,
     fingerprint: str,
     previous: LocalRepo | None,
-) -> dict[str, object]:
+) -> _Measured:
     """The measured fields, taken fresh or carried over from ``previous``.
 
     Carried over when the clone has not moved *and* the old reading is younger
