@@ -58,6 +58,21 @@ def test_the_newest_default_branch_artifact_wins_not_the_newest_overall(make_cli
     assert client.coverage_artifact("o/r", "main") == 2
 
 
+def test_an_older_artifact_listed_after_a_newer_one_does_not_win(make_client):
+    """Newest wins by created_at, not by where it sits in the listing."""
+    client = make_client(
+        {
+            ARTIFACTS: {
+                "artifacts": [
+                    artifact(2, "main", "2026-08-27T04:07:41Z"),  # newest on main
+                    artifact(1, "main", "2026-08-26T04:07:41Z"),  # older, listed after
+                ]
+            }
+        }
+    )
+    assert client.coverage_artifact("o/r", "main") == 2
+
+
 def test_expired_and_unrelated_artifacts_are_ignored(make_client):
     client = make_client(
         {
