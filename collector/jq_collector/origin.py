@@ -58,6 +58,11 @@ def forge_for_host(host: str) -> str:
     exactly as they did before this module existed; a fleet on some other forge
     says so with an explicit ``forge:`` in repos.yml rather than relying on a
     guess from a hostname.
+
+    >>> forge_for_host("gitlab.com"), forge_for_host("gitlab.example.org")
+    ('gitlab', 'gitlab')
+    >>> forge_for_host("github.example.org"), forge_for_host("")
+    ('github', 'github')
     """
     host = host.lower()
     if host == "gitlab.com" or host.startswith("gitlab."):
@@ -70,6 +75,21 @@ def parse(url: str) -> Origin | None:
 
     Handles the four shapes a remote is written in: ``scheme://host/path``,
     the scp-like ``[user@]host:path``, and a bare absolute or relative path.
+
+    >>> parse("git@github.com:Jebel-Quant/monitoring.git")
+    Origin(host='github.com', namespace='Jebel-Quant', name='monitoring')
+
+    A GitLab namespace keeps every segment, not just the last one:
+
+    >>> parse("https://gitlab.com/acme/platform/infra/web.git").full_name
+    'acme/platform/infra/web'
+
+    A path remote has no host, so only its tail names the repo:
+
+    >>> parse("/srv/mirrors/o/r")
+    Origin(host='', namespace='o', name='r')
+    >>> parse("git@github.com:lonely") is None
+    True
     """
     url = url.strip().removesuffix(".git")
     if not url:

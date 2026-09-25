@@ -63,6 +63,15 @@ def normalise_gitlab_status(status: str) -> str:
     An unrecognised status becomes ``stale`` rather than ``failure``: GitLab has
     added states before and will again, and a new one appearing as a fleet-wide
     red is a worse failure mode than it appearing as "no verdict yet".
+
+    >>> normalise_gitlab_status("failed")
+    'failure'
+    >>> normalise_gitlab_status(" Canceled ")
+    'cancelled'
+    >>> normalise_gitlab_status("manual")
+    'cancelled'
+    >>> normalise_gitlab_status("some_future_state")
+    'stale'
     """
     return _GITLAB_STATUS.get((status or "").strip().lower(), "stale")
 
