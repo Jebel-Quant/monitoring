@@ -32,6 +32,11 @@ addopts = "-q"
 # jq_local_code_lines, which counts every tracked source file in the repo.
 source = ["jq_collector"]
 
+[tool.coverage.report]
+# The package is fully covered; this keeps it that way. pytest-cov reads it, so
+# CI's test step fails on a drop without a --cov-fail-under of its own.
+fail_under = 100
+
 [tool.ruff]
 # Kept here rather than passed as a flag, so `check` and `format` cannot
 # disagree - a --line-length on one and not the other silently fails CI.
