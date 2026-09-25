@@ -45,17 +45,23 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # uv itself, so the resolver reading the lock is the same every run.
+          version: "0.11.28"
 
+      # Every tool below comes from collector/uv.lock, ruff included, on the
+      # Python in collector/.python-version. --frozen means the lock is used as
+      # committed and never re-resolved, so an upstream release cannot turn an
+      # unrelated pull request red; bumping a tool is a lock change, reviewed
+      # like any other.
       - name: Lint
-        run: uvx ruff check jq_collector tests
+        run: uv run --frozen ruff check jq_collector tests
 
       - name: Format
-        run: uvx ruff format --check jq_collector tests
+        run: uv run --frozen ruff format --check jq_collector tests
 
       - name: Tests
         run: |
-          uv run --with pytest --with pytest-cov --with prometheus-client --with httpx \
-            --with pyyaml python -m pytest \
+          uv run --frozen python -m pytest \
             --cov=jq_collector --cov-report=term-missing --cov-report=xml:_tests/coverage.xml
 
       # The board reads coverage from this artifact, for this repo as for every
@@ -71,6 +77,28 @@ jobs:
           name: coverage-report
           path: collector/_tests/coverage.xml
           if-no-files-found: error
+
+  # requires-python says >=3.11 while the image and the job above run 3.12, so
+  # without this the declared floor is a claim nothing checks. Tests only: lint
+  # and format do not depend on the interpreter, and the coverage artifact must
+  # come from exactly one job - two uploads named `coverage-report` collide.
+  collector-floor:
+    name: collector (tests, Python 3.11)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: collector
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          # uv itself, so the resolver reading the lock is the same every run.
+          version: "0.11.28"
+
+      - name: Tests
+        run: uv run --frozen --python 3.11 python -m pytest --cov=jq_collector
 
   dashboards:
     name: dashboards
