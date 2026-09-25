@@ -40,11 +40,13 @@ source = ["jq_collector"]
 fail_under = 100
 
 [tool.mypy]
-# The package only, checked against the oldest Python it claims to run on. Not
-# --strict yet: this is the floor that catches an undefined attribute before a
-# refresh does, and it can be tightened once it holds.
+# The package only, checked against the oldest Python it claims to run on, and
+# strict: every signature typed, every generic parameterised. JSON payloads are
+# dict[str, Any] - the forge decides their shape, so Any is the honest type
+# there rather than a gap. CI's Types step reads this, so it enforces it too.
 files = ["jq_collector"]
 python_version = "3.11"
+strict = true
 
 [tool.ruff]
 # Kept here rather than passed as a flag, so `check` and `format` cannot
