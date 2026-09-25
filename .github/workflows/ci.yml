@@ -40,9 +40,9 @@ jobs:
       run:
         working-directory: collector
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           enable-cache: true
           # uv itself, so the resolver reading the lock is the same every run.
@@ -77,7 +77,7 @@ jobs:
       # this is a `uses` step - getting that wrong uploads an empty artifact and
       # the column silently reads "no report".
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report
           path: collector/_tests/coverage.xml
@@ -94,9 +94,9 @@ jobs:
       run:
         working-directory: collector
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           enable-cache: true
           # uv itself, so the resolver reading the lock is the same every run.
@@ -109,7 +109,7 @@ jobs:
     name: dashboards
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Panel ids, link targets and grid overlaps
         run: python3 scripts/check-dashboard.py
@@ -118,7 +118,7 @@ jobs:
     name: image builds and comes up
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Build
         run: docker build -t jq-monitoring:ci .
