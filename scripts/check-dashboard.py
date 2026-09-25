@@ -44,7 +44,6 @@ for path in paths:
     # claiming the same cells makes Grafana shuffle them unpredictably on load.
     placed = [p for p in dash["panels"]]
 
-
     def overlaps(a, b):
         return not (
             a["x"] + a["w"] <= b["x"]
@@ -52,7 +51,6 @@ for path in paths:
             or a["y"] + a["h"] <= b["y"]
             or b["y"] + b["h"] <= a["y"]
         )
-
 
     for i, first in enumerate(placed):
         for second in placed[i + 1 :]:
