@@ -75,7 +75,7 @@ def _is_checkout(path: str) -> bool:
     return os.path.exists(os.path.join(path, ".git"))
 
 
-def _declared_forge(item: dict, index: int) -> str | None:
+def _declared_forge(item: dict[str, Any], index: int) -> str | None:
     """The entry's explicit ``forge:``, validated, or None if it has none.
 
     An unknown value is refused rather than defaulted. Silently reading
@@ -92,7 +92,7 @@ def _declared_forge(item: dict, index: int) -> str | None:
     return declared
 
 
-def _excluded(item: dict, index: int, raw: str) -> frozenset[str]:
+def _excluded(item: dict[str, Any], index: int, raw: str) -> frozenset[str]:
     """A folder's ``exclude:`` list, as a set of directory names.
 
     A single name may be written on its own - ``exclude: numpy`` - because a
@@ -121,7 +121,9 @@ def _excluded(item: dict, index: int, raw: str) -> frozenset[str]:
     return frozenset(names - {""})
 
 
-def _folder(item: dict, index: int, host_root: str, claimed: frozenset[str]) -> list[dict]:
+def _folder(
+    item: dict[str, Any], index: int, host_root: str, claimed: frozenset[str]
+) -> list[dict[str, Any]]:
     """A ``folder:`` entry -> one ``path:`` entry per checkout inside it.
 
     Only the folder's own children are looked at, never their children in turn.
@@ -240,7 +242,7 @@ def _expand(
     return [(item, False)]
 
 
-def _claimed_paths(entries: list, host_root: str) -> frozenset[str]:
+def _claimed_paths(entries: list[Any], host_root: str) -> frozenset[str]:
     """Every checkout the file names by ``path``, resolved for this filesystem.
 
     A folder skips these, so an entry written out for one checkout inside a
@@ -311,7 +313,7 @@ def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None, str]
     return parsed.full_name, path, declared or parsed.forge
 
 
-def _read_entries(source: str) -> list:
+def _read_entries(source: str) -> list[Any]:
     """The non-empty ``repos:`` list of ``source``, or a FleetError saying why not."""
     import yaml
 
