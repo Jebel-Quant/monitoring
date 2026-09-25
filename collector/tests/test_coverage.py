@@ -104,8 +104,12 @@ def test_an_expired_artifact_download_is_survivable(make_client):
         zipped("<coverage/>"),  # no line-rate
         zipped("not xml", "coverage.xml"),  # unparseable
         zipped(REPORT, "something-else.txt"),  # no coverage.xml inside
+        # Well-formed, and the stdlib parser would read it as 100%: the entity
+        # expands to a valid rate. Entities are how an XML bomb is built, so a
+        # report that declares one is refused rather than expanded.
+        zipped('<!DOCTYPE c [<!ENTITY r "1">]><coverage line-rate="&r;"/>'),
     ],
-    ids=["not-a-zip", "no-line-rate", "bad-xml", "no-coverage-xml"],
+    ids=["not-a-zip", "no-line-rate", "bad-xml", "no-coverage-xml", "declares-an-entity"],
 )
 def test_a_malformed_report_is_ci_s_problem_not_a_failed_refresh(make_client, blob):
     """Everything else in the refresh has already been gathered by this point."""
