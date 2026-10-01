@@ -153,6 +153,30 @@ def _folder(
     naming the folder was to get those repos on the board.
     """
     raw = str(item.get("folder") or "").strip()
+    _refuse_single_repo_keys(item, index, raw)
+    # Validated here so a bad `forge:` on the folder is refused once, against
+    # the line that was actually written, rather than per checkout found.
+    forge = _declared_forge(item, index)
+    excluded = _excluded(item, index, raw)
+
+    checkouts = _checkouts_in(resolve_path(raw, host_root), index, raw)
+    _warn_spent_excludes(raw, excluded, checkouts)
+
+    # The emptiness check is on what is in the folder, not on what is left
+    # after the excluded and claimed ones go: a folder whose every checkout has
+    # an entry of its own is a redundant line, not a mistake worth refusing to
+    # start over.
+    taken = [
+        child
+        for child in checkouts
+        if child not in claimed and os.path.basename(child) not in excluded
+    ]
+    _log_taken(raw, len(taken), len(checkouts))
+    return [{"path": child, "forge": forge} for child in taken]
+
+
+def _refuse_single_repo_keys(item: dict[str, Any], index: int, raw: str) -> None:
+    """Refuse a ``folder:`` entry that also carries ``path:`` or ``repo:``."""
     for key in ("path", "repo"):
         if item.get(key):
             raise FleetError(
@@ -160,12 +184,14 @@ def _folder(
                 "a folder stands for however many repos are in it, so there is "
                 "no one path or name to give it. List the repo on its own entry."
             )
-    # Validated here so a bad `forge:` on the folder is refused once, against
-    # the line that was actually written, rather than per checkout found.
-    forge = _declared_forge(item, index)
-    excluded = _excluded(item, index, raw)
 
-    folder = resolve_path(raw, host_root)
+
+def _checkouts_in(folder: str, index: int, raw: str) -> list[str]:
+    """The git checkouts directly inside ``folder``, sorted, or a FleetError.
+
+    An unreadable folder and one holding no checkouts are both refused - see
+    ``_folder`` for why.
+    """
     try:
         children = sorted(entry.path for entry in os.scandir(folder) if entry.is_dir())
     except OSError as exc:
@@ -182,6 +208,11 @@ def _folder(
             "A folder is scanned one level deep, so name the folder the "
             "checkouts are directly in."
         )
+    return checkouts
+
+
+def _warn_spent_excludes(raw: str, excluded: frozenset[str], checkouts: list[str]) -> None:
+    """Log the excludes that name no checkout in the folder."""
     if missed := excluded - {os.path.basename(child) for child in checkouts}:
         # Said out loud, but not fatal, and the asymmetry is deliberate. An
         # exclude exists to keep something off the board; nothing there to
@@ -198,25 +229,18 @@ def _folder(
             ", ".join(sorted(missed)),
         )
 
-    # The emptiness check is on what is in the folder, not on what is left
-    # after the excluded and claimed ones go: a folder whose every checkout has
-    # an entry of its own is a redundant line, not a mistake worth refusing to
-    # start over.
-    taken = [
-        child
-        for child in checkouts
-        if child not in claimed and os.path.basename(child) not in excluded
-    ]
-    if len(taken) == len(checkouts):
-        log.info("folder %s: %d checkouts", raw, len(taken))
+
+def _log_taken(raw: str, taken: int, found: int) -> None:
+    """Log how many of a folder's checkouts it kept, and how many it left."""
+    if taken == found:
+        log.info("folder %s: %d checkouts", raw, taken)
     else:
         log.info(
             "folder %s: %d checkouts, %d left to an entry of their own",
             raw,
-            len(taken),
-            len(checkouts) - len(taken),
+            taken,
+            found - taken,
         )
-    return [{"path": child, "forge": forge} for child in taken]
 
 
 def _expand(
@@ -257,6 +281,39 @@ def _claimed_paths(entries: list[Any], host_root: str) -> frozenset[str]:
     return frozenset(claimed)
 
 
+def _remote_only(item: dict[str, Any], index: int, named: str) -> str:
+    """The ``owner/name`` of an entry with no ``path:``, or a FleetError.
+
+    No checkout means no origin to infer from, so an entry on any forge but the
+    default has to say so itself - the caller falls back to GitHub.
+    """
+    # Name the offending value, not just the rule. "entry 7" in a
+    # twenty-five entry file means counting; the value is searchable.
+    if not named:
+        raise FleetError(f"entry {index} ({item!r}) has neither a `path` nor a `repo: owner/name`")
+    if "/" not in named:
+        raise FleetError(f"entry {index}: repo {named!r} is not of the form owner/name")
+    return named
+
+
+def _no_checkout(index: int, named: str, raw_path: Any, path: str) -> str:
+    """The ``owner/name`` to keep for a ``path:`` with no checkout, or a FleetError.
+
+    Not an error when the entry names its repo: the home directory may not be
+    mounted, or this repo may simply not be checked out here. Either way the
+    fleet keeps the repo and only the working-copy panels go quiet - but say so
+    once, because a typo in repos.yml looks exactly like this from here.
+    """
+    if named and "/" in named:
+        log.warning("no checkout for %s at %s - remote panels only", named, path)
+        return named
+    raise FleetError(
+        f"entry {index}: {raw_path} is not a git checkout (looked in {path}). "
+        "Mount the home directory it lives under, or give the entry a "
+        "`repo: owner/name` so it can be monitored without one."
+    )
+
+
 def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None, str]:
     """One entry -> ``(namespace/name, checkout path or None, forge)``."""
     # `- ~/repos/foo` is accepted as shorthand for `- path: ~/repos/foo`.
@@ -270,33 +327,12 @@ def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None, str]
     declared = _declared_forge(item, index)
 
     if raw_path is None:
-        # Name the offending value, not just the rule. "entry 7" in a
-        # twenty-five entry file means counting; the value is searchable.
-        if not named:
-            raise FleetError(
-                f"entry {index} ({item!r}) has neither a `path` nor a `repo: owner/name`"
-            )
-        if "/" not in named:
-            raise FleetError(f"entry {index}: repo {named!r} is not of the form owner/name")
-        # No checkout means no origin to infer from, so an entry on any forge
-        # but the default has to say so itself.
-        return named, None, declared or origin.GITHUB
+        return _remote_only(item, index, named), None, declared or origin.GITHUB
 
     path = resolve_path(str(raw_path), host_root)
 
     if not _is_checkout(path):
-        # Not an error: the home directory may not be mounted, or this repo may
-        # simply not be checked out here. Either way the fleet keeps the repo
-        # and only the working-copy panels go quiet - but say so once, because
-        # a typo in repos.yml looks exactly like this from here.
-        if named and "/" in named:
-            log.warning("no checkout for %s at %s - remote panels only", named, path)
-            return named, None, declared or origin.GITHUB
-        raise FleetError(
-            f"entry {index}: {raw_path} is not a git checkout (looked in {path}). "
-            "Mount the home directory it lives under, or give the entry a "
-            "`repo: owner/name` so it can be monitored without one."
-        )
+        return _no_checkout(index, named, raw_path, path), None, declared or origin.GITHUB
 
     parsed = origin.read(path)
 
