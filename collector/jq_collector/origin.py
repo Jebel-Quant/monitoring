@@ -22,7 +22,7 @@ best available guess.
 from __future__ import annotations
 
 import logging
-import subprocess
+import subprocess  # nosec B404 - only ever runs git, argv-only; see read
 from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
@@ -124,8 +124,9 @@ def read(path: str) -> Origin | None:
     clones are somebody's live working copies and a monitor has no business
     taking a lock in one.
     """
+    # Fixed argv, no shell, git from PATH - the same reasoning as localgit._git.
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607
             ["git", "--no-optional-locks", "-C", path, "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
