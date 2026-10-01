@@ -234,6 +234,41 @@ def _ahead_behind(path: str) -> tuple[int | None, int | None]:
         return None, None
 
 
+def _status_counts(path: str) -> tuple[int, int]:
+    """Modified and untracked file counts, from one ``git status``."""
+    status = _git(path, "status", "--porcelain=v1") or ""
+    lines = [line for line in status.splitlines() if line.strip()]
+    untracked = sum(1 for line in lines if line.startswith("??"))
+    return len(lines) - untracked, untracked
+
+
+def _head(path: str) -> tuple[float, str]:
+    """HEAD's commit time and sha - one call for both, the sha being what the
+    fingerprint needs. ``(0.0, "")`` where there is no commit to read."""
+    head = (_git(path, "log", "-1", "--format=%ct %H") or "").split()
+    last_commit = head[0] if head else ""
+    head_sha = head[1] if len(head) > 1 else ""
+    return (float(last_commit) if last_commit.isdigit() else 0.0), head_sha
+
+
+def _branch_name(path: str, head_sha: str) -> str:
+    """The checked-out branch, or ``detached@<sha>`` for a detached HEAD.
+
+    A detached HEAD reports "HEAD"; naming the commit instead gives the
+    dashboard something actionable.
+    """
+    branch = _git(path, "rev-parse", "--abbrev-ref", "HEAD") or ""
+    if branch == "HEAD":
+        return f"detached@{head_sha[:7]}" if head_sha else "detached@unknown"
+    return branch
+
+
+def _stash_count(path: str) -> int:
+    """How many stash entries the clone holds."""
+    stashes = _git(path, "stash", "list") or ""
+    return len([s for s in stashes.splitlines() if s.strip()])
+
+
 def scan_repo(
     name: str,
     owner: str,
@@ -251,23 +286,10 @@ def scan_repo(
     included - drift is the one thing that can change without the clone moving
     at all, because it is the *upstream* that moved.
     """
-    status = _git(path, "status", "--porcelain=v1") or ""
-    lines = [line for line in status.splitlines() if line.strip()]
-    untracked = sum(1 for line in lines if line.startswith("??"))
-    dirty = len(lines) - untracked
+    dirty, untracked = _status_counts(path)
     ahead, behind = _ahead_behind(path)
-
-    # One call for both: the commit time and the sha the fingerprint needs.
-    head = (_git(path, "log", "-1", "--format=%ct %H") or "").split()
-    last_commit = head[0] if head else ""
-    head_sha = head[1] if len(head) > 1 else ""
-    stashes = _git(path, "stash", "list") or ""
-
-    branch = _git(path, "rev-parse", "--abbrev-ref", "HEAD") or ""
-    # A detached HEAD reports "HEAD"; name the commit instead so the dashboard
-    # shows something actionable.
-    if branch == "HEAD":
-        branch = f"detached@{head_sha[:7]}" if head_sha else "detached@unknown"
+    last_commit, head_sha = _head(path)
+    branch = _branch_name(path, head_sha)
 
     git_dir = _git_dir(path)
     branch_sha = _git(path, "rev-parse", "--verify", "--quiet", default_branch) or ""
@@ -284,8 +306,8 @@ def scan_repo(
         untracked_files=untracked,
         ahead=ahead,
         behind=behind,
-        stashes=len([s for s in stashes.splitlines() if s.strip()]),
-        last_commit_at=float(last_commit) if last_commit.isdigit() else 0.0,
+        stashes=_stash_count(path),
+        last_commit_at=last_commit,
         fetch_age=_fetch_age(git_dir),
         head_sha=head_sha,
         default_branch_sha=branch_sha,
