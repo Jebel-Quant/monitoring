@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
+import subprocess  # nosec B404 - only ever runs git, argv-only; see _git
 import time
 from typing import TypedDict
 
@@ -46,8 +46,11 @@ _TIMEOUT = 20
 
 def _git(path: str, *args: str) -> str | None:
     """Run a read-only git command, returning None if it fails."""
+    # A fixed argv with no shell, so path and args reach git as arguments and
+    # never as a command line; `git` is resolved on PATH on purpose, since the
+    # image and a laptop keep it in different places.
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607
             ["git", "--no-optional-locks", "-C", path, *args],
             capture_output=True,
             text=True,
