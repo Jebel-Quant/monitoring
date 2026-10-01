@@ -41,6 +41,8 @@ mkdir -p /data/prometheus /data/grafana
 
 # -- shut down together ------------------------------------------------------
 pids=()
+# Invoked only through the trap below, which shellcheck cannot follow.
+# shellcheck disable=SC2329
 stop() {
   trap - TERM INT
   # Signal the group rather than each pid: promtool-style children and

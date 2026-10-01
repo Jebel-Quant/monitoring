@@ -35,6 +35,7 @@ for f in image/*.sh; do bash -n "$f"; done          # The entry points parse
 GITHUB_TOKEN=dummy docker compose config --quiet    # The compose file parses
 docker build -t jq-monitoring:ci .                  # The image builds
 uvx --with mkdocs-material==9.6.14 mkdocs build --strict  # The book, broken links fail it
+uvx prek@0.5.4 run --all-files                      # Every hook in .pre-commit-config.yaml
 ```
 
 CI then starts that image against a throwaway `repos.yml` and checks it serves

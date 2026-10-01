@@ -1,0 +1,34 @@
+# Runs .pre-commit-config.yaml, so the hooks that ci.yml does not run itself -
+# bandit, shellcheck, markdownlint, actionlint, betterleaks, uv-lock - gate a
+# pull request instead of depending on somebody having installed them. Two of
+# them sat red on main unnoticed before this existed.
+#
+# Its own workflow rather than a job in ci.yml, because ci.yml skips prose-only
+# changes and markdownlint is the hook that most needs to see those.
+name: Hooks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  prek:
+    name: pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+          # uv itself, the same one ci.yml pins.
+          version: "0.11.28"
+
+      # prek pinned like every other tool here; each hook's own version is
+      # pinned by its rev in .pre-commit-config.yaml.
+      - name: Run every hook over every file
+        run: uvx prek@0.5.4 run --all-files --show-diff-on-failure
