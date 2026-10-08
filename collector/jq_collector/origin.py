@@ -43,10 +43,12 @@ class Origin:
 
     @property
     def full_name(self) -> str:
+        """``namespace/name``, the repo's key everywhere else in the collector."""
         return f"{self.namespace}/{self.name}"
 
     @property
     def forge(self) -> str:
+        """Which forge the origin's host is."""
         return forge_for_host(self.host)
 
 

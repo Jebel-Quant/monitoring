@@ -42,6 +42,8 @@ _ACCEPT = "application/vnd.github+json"
 
 
 class GitHub:
+    """A GitHub REST client for one refresh, tracking the rate limit off every response."""
+
     def __init__(self, cfg: Config) -> None:
         self._cfg = cfg
         headers = {"Accept": _ACCEPT, "X-GitHub-Api-Version": "2022-11-28"}
@@ -58,14 +60,17 @@ class GitHub:
         self.rate_reset = 0.0
 
     def close(self) -> None:
+        """Release the client's connections."""
         self._client.close()
 
     def _get(self, path: str, **params: str | int) -> httpx.Response:
+        """GET ``path``, noting the rate-limit headers whatever the status."""
         response = self._client.get(path, params=params or None)
         self._note_rate_limit(response)
         return response
 
     def _note_rate_limit(self, response: httpx.Response) -> None:
+        """Copy the ``x-ratelimit-*`` headers onto the client; a malformed one is skipped."""
         for header, attr in (
             ("x-ratelimit-remaining", "rate_remaining"),
             ("x-ratelimit-limit", "rate_limit"),
@@ -105,6 +110,7 @@ class GitHub:
         return response.content
 
     def _paginate(self, path: str, **params: str | int) -> list[dict[str, Any]]:
+        """Every item of a list endpoint, 100 a page, stopping at an empty or short page or page 10."""
         items: list[dict[str, Any]] = []
         page = 1
         while True:
@@ -195,6 +201,7 @@ class GitHub:
     # -- per repo --------------------------------------------------------
 
     def branch_sha(self, full_name: str, branch: str) -> str:
+        """The commit sha at the tip of ``branch``, or ``""`` if it cannot be read."""
         data = self._json(f"/repos/{full_name}/branches/{branch}")
         if not isinstance(data, dict):
             return ""

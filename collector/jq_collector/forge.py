@@ -136,9 +136,11 @@ class RemoteSource(Protocol):
         self,
         ref_cache: dict[str, tuple[str, str]],
         coverage_cache: dict[str, tuple[int, tuple[float, int] | None]],
-    ) -> tuple[dict[str, RemoteRepo], frozenset[str]]: ...
+    ) -> tuple[dict[str, RemoteRepo], frozenset[str]]:
+        """This forge's repos keyed by ``namespace/name``, and the ones it dropped."""
 
-    def close(self) -> None: ...
+    def close(self) -> None:
+        """Release the client's connections."""
 
 
 # -- shared by both collectors -----------------------------------------------
