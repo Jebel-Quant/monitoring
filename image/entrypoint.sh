@@ -45,8 +45,11 @@ pids=()
 # shellcheck disable=SC2329
 stop() {
   trap - TERM INT
-  # Signal the group rather than each pid: promtool-style children and
-  # Grafana's own subprocesses are otherwise left behind holding /data.
+  # Each pid, not its process group: TERM lets each of the three shut down
+  # cleanly - Prometheus flushes its head block, Grafana stops its own plugin
+  # processes - and that is what keeps /data consistent. Anything a process
+  # still leaves behind cannot outlive us: this script is PID 1, and when it
+  # exits the kernel kills everything else in the container.
   kill -TERM "${pids[@]}" 2>/dev/null
   wait
   exit 0
