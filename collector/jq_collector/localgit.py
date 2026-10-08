@@ -139,6 +139,9 @@ def _fingerprint(head_sha: str, branch_sha: str, dirty: int, untracked: int, tag
     guards each depend on one of them: the line counts on the working copy
     (head, dirty, untracked), the commit counts on the default branch, the
     release counter on the tags.
+
+    >>> _fingerprint("abc", "def", 2, 0, 1767225600.25)
+    'abc:def:2:0:1767225600.250000'
     """
     # Sub-second precision on the mtime is not fussiness: cutting a release and
     # the scan that follows it land in the same second often enough, and a
@@ -164,6 +167,15 @@ _TEST_DIRS = frozenset({"test", "tests", "testing"})
 
 
 def _is_test(rel: str) -> bool:
+    """Whether a tracked path counts toward the test half of the line split.
+
+    >>> _is_test("tests/unit/helpers.py"), _is_test("src/pkg/test_io.py")
+    (True, True)
+    >>> _is_test("cmd/server_test.go"), _is_test("web/app.test.ts")
+    (True, True)
+    >>> _is_test("src/pkg/contest.py"), _is_test("src/testing_utils.py")
+    (False, False)
+    """
     *parents, base = rel.split("/")
     if any(part in _TEST_DIRS for part in parents):
         return True
