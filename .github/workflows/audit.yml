@@ -1,0 +1,55 @@
+# Checks every package pinned in collector/uv.lock against the PyPI advisory
+# database. deptry and --frozen keep the lock honest and stable; neither says
+# whether anything in it is known to be vulnerable, and before this nothing did.
+#
+# Its own workflow rather than a job in ci.yml for the schedule: an advisory is
+# usually published against a lock that has not changed, so a check that runs
+# only when the lock moves would stay green on a vulnerable pin indefinitely.
+name: Audit
+
+on:
+  pull_request:
+    paths:
+      - 'collector/uv.lock'
+      - 'collector/pyproject.toml'
+      - '.github/workflows/audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'collector/uv.lock'
+      - 'collector/pyproject.toml'
+      - '.github/workflows/audit.yml'
+  schedule:
+    # Mondays, early. A red scheduled run shows on the Actions tab and mails
+    # whoever last touched the workflow.
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    name: pip-audit (collector/uv.lock)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: collector
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+          # uv itself, the same one ci.yml pins.
+          version: "0.11.28"
+
+      # The lock exported as hashed requirements, dev group included - ruff,
+      # mypy and pytest run in CI with a token in reach, so they count too.
+      # --disable-pip audits the pins as written instead of resolving them into
+      # a scratch venv, and --require-hashes makes that safe: every line carries
+      # the hashes uv locked. pip-audit pinned like every other tool here.
+      - name: Audit the locked dependencies
+        run: |
+          uv export --frozen --no-emit-project \
+            | uvx pip-audit@2.10.1 --disable-pip --require-hashes -r /dev/stdin
