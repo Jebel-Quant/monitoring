@@ -65,7 +65,7 @@ def _ts(value: str | None) -> float:
     GitLab returns ``2026-08-31T06:05:36.000Z``, where GitHub's has no
     milliseconds. Both parse as they stand: 3.11 taught ``fromisoformat`` the
     whole of ISO 8601, including the trailing ``Z``, and 3.11 is this package's
-    floor - so this is `github._ts` with a different docstring.
+    floor - so this is `github_payloads.ts` with a different docstring.
     """
     if not value:
         return 0.0
