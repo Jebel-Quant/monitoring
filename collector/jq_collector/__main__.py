@@ -33,6 +33,7 @@ log = logging.getLogger("jq_collector")
 
 
 def _refresh_local(cfg: Config, store: Store) -> None:
+    """Rescan every working copy and publish it, reusing measurements that have not moved."""
     snap = store.snapshot()
     branches = {name: repo.default_branch for name, repo in snap.remote.items()}
     # The previous scan is the measurement cache: a repo that has not moved
@@ -186,6 +187,7 @@ def _loop(
 
 
 def main() -> None:
+    """Seed both sources, then serve ``/metrics`` while refreshing each on its own interval."""
     logging.basicConfig(
         level=os.environ.get("JQ_LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)-7s %(name)s %(message)s",

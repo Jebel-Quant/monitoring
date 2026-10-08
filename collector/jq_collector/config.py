@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 
 
 def _int(name: str, default: int) -> int:
+    """The integer in environment variable ``name``, or ``default`` when unset or blank."""
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default
@@ -20,6 +21,7 @@ def _int(name: str, default: int) -> int:
 
 
 def _csv(name: str, default: tuple[str, ...] = ()) -> tuple[str, ...]:
+    """Environment variable ``name`` as a tuple of non-empty, stripped comma-separated parts."""
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default
@@ -201,6 +203,7 @@ class Config:
             )
 
     def is_ignored(self, owner: str, name: str) -> bool:
+        """Whether JQ_IGNORE names this repo, by bare name or as ``owner/name``."""
         return name in self.ignore or f"{owner}/{name}" in self.ignore
 
     def forge_for(self, full_name: str) -> str:

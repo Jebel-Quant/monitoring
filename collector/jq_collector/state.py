@@ -13,6 +13,8 @@ from dataclasses import dataclass, field, replace
 
 @dataclass(frozen=True)
 class PullRequest:
+    """An open pull (or merge) request, with its checks rolled up to one word."""
+
     number: int
     title: str
     author: str
@@ -171,6 +173,8 @@ class LocalRepo:
 
 @dataclass(frozen=True)
 class SourceHealth:
+    """How one source's refreshes are going: last success, its duration, and the errors since."""
+
     last_success: float = 0.0
     last_duration: float = 0.0
     errors: int = 0
@@ -209,18 +213,22 @@ class Store:
         self._snapshot = Snapshot()
 
     def snapshot(self) -> Snapshot:
+        """The current snapshot. It is immutable, so a caller may keep it after the store moves on."""
         with self._lock:
             return self._snapshot
 
     def update(self, **changes: object) -> None:
+        """Replace the given snapshot fields at once, so a reader never sees half an update."""
         with self._lock:
             self._snapshot = replace(self._snapshot, **changes)  # type: ignore[arg-type]
 
     def record_health(self, source: str, health: SourceHealth) -> None:
+        """Set one source's health, leaving the other sources' alone."""
         with self._lock:
             health_map = dict(self._snapshot.health)
             health_map[source] = health
             self._snapshot = replace(self._snapshot, health=health_map)
 
     def health_for(self, source: str) -> SourceHealth:
+        """One source's health, or a fresh SourceHealth if it has never reported."""
         return self.snapshot().health.get(source, SourceHealth())

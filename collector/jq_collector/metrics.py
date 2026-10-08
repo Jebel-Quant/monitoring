@@ -40,10 +40,12 @@ from .state import LocalRepo, RemoteRepo, Snapshot, Store, WorkflowRun
 
 
 def _gauge(name: str, doc: str, labels: list[str] | None = None) -> GaugeMetricFamily:
+    """A gauge family with ``labels`` (none by default)."""
     return GaugeMetricFamily(name, doc, labels=labels or [])
 
 
 def render(snap: Snapshot) -> Iterator[Metric]:
+    """The whole exposition for one snapshot: collector health first, then every repo's series."""
     yield from _health(snap)
 
     f = _Families()
@@ -358,6 +360,7 @@ class _Families:
         )
 
     def in_exposition_order(self) -> tuple[GaugeMetricFamily, ...]:
+        """Every family, in the order the exposition lists them."""
         return (
             self.repo_info,
             self.cloned,
@@ -409,6 +412,7 @@ class _Families:
 def _add_identity(
     f: _Families, key: str, remote: RemoteRepo | None, local: LocalRepo | None
 ) -> None:
+    """The repo's info series (owner, branch, visibility, forge, URLs) and whether it is cloned here."""
     # rpartition, not partition: a GitLab namespace nests, so the owner is
     # everything before the last slash rather than the first segment.
     owner = key.rpartition("/")[0]
@@ -428,10 +432,12 @@ def _add_identity(
 
 
 def _default_branch(remote: RemoteRepo | None) -> str:
+    """The forge's default branch, or ``main`` when the forge has not answered."""
     return remote.default_branch if remote else "main"
 
 
 def _add_remote(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    """Every series the forge's answer feeds."""
     f.pushed.add_metric(ident, remote.pushed_at)
     _add_protection(f, ident, remote)
     _add_alerts(f, ident, remote)
@@ -442,6 +448,7 @@ def _add_remote(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
 
 
 def _add_protection(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    """Branch-protection series, left out entirely when the forge would not say."""
     if remote.protected is not None:
         f.protected.add_metric(ident, 1 if remote.protected else 0)
         f.required_reviews.add_metric(ident, remote.required_reviews)
@@ -449,6 +456,7 @@ def _add_protection(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
 
 
 def _add_alerts(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    """Whether alerts are on and, if so, the open count per severity."""
     f.alerts_enabled.add_metric(ident, 1 if remote.alerts_enabled else 0)
     if remote.alerts_enabled:
         # Zero-fill the severities GitHub uses, so a repo that has just
@@ -462,6 +470,7 @@ def _add_alerts(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
 
 
 def _add_drift(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    """Template series: managed or not, the pinned ref, and how many releases it is behind."""
     f.managed.add_metric(ident, 1 if remote.rhiza_managed else 0)
     if remote.rhiza_ref:
         f.ref_info.add_metric([*ident, remote.rhiza_ref], 1)
@@ -470,6 +479,7 @@ def _add_drift(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
 
 
 def _latest_per_workflow(workflows: tuple[WorkflowRun, ...]) -> dict[str, WorkflowRun]:
+    """The newest conclusive run of each workflow name, so no label set appears twice."""
     # Collapse workflows sharing a name, newest run winning. github.py
     # already guarantees one per name, but this layer owns the exposition
     # contract: duplicate label sets are silently dropped by Prometheus
@@ -485,6 +495,7 @@ def _latest_per_workflow(workflows: tuple[WorkflowRun, ...]) -> dict[str, Workfl
 
 
 def _add_ci(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    """Per-workflow verdicts and times, and the repo-level CI verdict."""
     bad = 0
     for wf in _latest_per_workflow(remote.workflows).values():
         good = wf.conclusion in _GOOD_CONCLUSIONS
@@ -512,6 +523,7 @@ def _add_ci(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
 
 
 def _add_pulls(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    """Open pull request and issue counts, and one info series per open pull request."""
     f.pr_count.add_metric(ident, remote.open_pulls_total)
     f.issue_count.add_metric(ident, remote.open_issues)
     # Red means red. A cancelled check is no verdict - the same rule the
@@ -536,6 +548,7 @@ def _add_pulls(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
 
 
 def _add_merged(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
+    """One series per recently merged pull request, valued at its merge time."""
     # One series per recently merged PR. The value is the merge time, so
     # the board can take topk() across the fleet rather than needing a
     # per-repo view. Deduped on number because a repo occasionally
@@ -550,6 +563,7 @@ def _add_merged(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
 
 
 def _add_local(f: _Families, ident: list[str], local: LocalRepo, remote: RemoteRepo | None) -> None:
+    """Every series the working copy feeds."""
     _add_working_copy(f, ident, local, remote)
     _add_upstream(f, ident, local, remote)
     _add_size(f, ident, local)
@@ -584,6 +598,7 @@ def _add_upstream(
 
 
 def _add_size(f: _Families, ident: list[str], local: LocalRepo) -> None:
+    """Line counts, recent commits and the release series for the checkout."""
     f.code_lines.add_metric(ident, local.code_lines)
     f.test_lines.add_metric(ident, local.test_lines)
     f.commits_30d.add_metric(ident, local.commits_30d)
@@ -602,4 +617,5 @@ class FleetCollector:
         self._store = store
 
     def collect(self) -> Iterator[Metric]:
+        """The current snapshot, rendered. prometheus_client calls this on every scrape."""
         yield from render(self._store.snapshot())

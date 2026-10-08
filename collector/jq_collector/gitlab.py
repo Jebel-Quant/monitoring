@@ -80,6 +80,8 @@ def _pid(full_name: str) -> str:
 
 
 class GitLab:
+    """A GitLab REST client for one refresh, authenticated with GITLAB_TOKEN when set."""
+
     def __init__(self, cfg: Config) -> None:
         self._cfg = cfg
         headers = {"Accept": "application/json"}
@@ -95,6 +97,7 @@ class GitLab:
         )
 
     def close(self) -> None:
+        """Release the client's connections."""
         self._client.close()
 
     def _json(self, path: str, **params: str | int) -> object | None:
@@ -130,6 +133,7 @@ class GitLab:
         return response.text if response is not None else None
 
     def _paginate(self, path: str, **params: str | int) -> list[dict[str, Any]]:
+        """Every item of a list endpoint, stopping at an empty or short page or page 10."""
         items: list[dict[str, Any]] = []
         page = 1
         while True:
@@ -183,6 +187,7 @@ class GitLab:
         return raw if isinstance(raw, dict) else None
 
     def branch_sha(self, full_name: str, branch: str) -> str:
+        """The commit sha at the tip of ``branch``, or ``""`` if it cannot be read."""
         data = self._json(
             f"/projects/{_pid(full_name)}/repository/branches/{quote(branch, safe='')}"
         )
@@ -295,6 +300,7 @@ class GitLab:
         return total, pulls
 
     def recent_merges(self, full_name: str, limit: int) -> list[MergedPull]:
+        """The ``limit`` most recently merged merge requests, newest first; any without a merge time are dropped."""
         raw = self._json(
             f"/projects/{_pid(full_name)}/merge_requests",
             state="merged",
