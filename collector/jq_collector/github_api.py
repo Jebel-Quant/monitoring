@@ -22,6 +22,7 @@ import yaml
 
 from . import coverage_xml
 from .config import Config
+from .forge import ts
 from .github_payloads import (
     active_workflow_names,
     alert_counts,
@@ -29,7 +30,6 @@ from .github_payloads import (
     inconclusive,
     newest_coverage_artifact,
     newest_per_workflow,
-    ts,
 )
 from .state import MergedPull, PullRequest
 

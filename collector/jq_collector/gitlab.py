@@ -38,7 +38,6 @@ a green tile.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -46,7 +45,7 @@ import httpx
 import yaml
 
 from .config import Config
-from .forge import cached_ref, ci_summary, fan_out, normalise_gitlab_status
+from .forge import behind_count, cached_ref, ci_summary, fan_out, normalise_gitlab_status, ts
 from .state import MergedPull, PullRequest, RemoteRepo, WorkflowRun
 
 log = logging.getLogger(__name__)
@@ -56,22 +55,6 @@ _MAX_WORKERS = 8
 # GitLab's own cap. Asking for more is not an error, it is silently clamped, so
 # there is nothing to gain by trying.
 _PER_PAGE = 100
-
-
-def _ts(value: str | None) -> float:
-    """One GitLab timestamp as epoch seconds, or 0.0 if it is unusable.
-
-    GitLab returns ``2026-08-31T06:05:36.000Z``, where GitHub's has no
-    milliseconds. Both parse as they stand: 3.11 taught ``fromisoformat`` the
-    whole of ISO 8601, including the trailing ``Z``, and 3.11 is this package's
-    floor - so this is `github_payloads.ts` with a different docstring.
-    """
-    if not value:
-        return 0.0
-    try:
-        return datetime.fromisoformat(value).timestamp()
-    except ValueError:
-        return 0.0
 
 
 def _pid(full_name: str) -> str:
@@ -286,8 +269,8 @@ class GitLab:
                     title=(item.get("title") or "")[:120],
                     author=(item.get("author") or {}).get("username") or "unknown",
                     draft=bool(item.get("draft")),
-                    created_at=_ts(item.get("created_at")),
-                    updated_at=_ts(item.get("updated_at")),
+                    created_at=ts(item.get("created_at")),
+                    updated_at=ts(item.get("updated_at")),
                     checks=_checks_state(status),
                     url=item.get("web_url") or "",
                 )
@@ -306,7 +289,7 @@ class GitLab:
             return []
         merged = []
         for item in raw:
-            at = _ts(item.get("merged_at"))
+            at = ts(item.get("merged_at"))
             if not at:
                 continue
             merged.append(
@@ -374,18 +357,6 @@ def _protection(entry: dict[str, Any] | None) -> tuple[bool | None, bool, int]:
     if entry is None:
         return False, False, 0
     return True, bool(entry.get("allow_force_push")), 0
-
-
-def _behind_count(tags: list[str], ref: str) -> int | None:
-    """How many template releases *ref* is behind, or None if it is not one.
-
-    Deliberately identical in meaning to ``github._behind_count``: the template
-    lives on GitHub whichever forge the repo pinning it lives on, so drift is
-    measured against the same tag list either way.
-    """
-    if not ref or ref not in tags:
-        return None
-    return tags.index(ref)
 
 
 def collect(
@@ -458,7 +429,7 @@ def _remote_repo(
         visibility=_visibility(raw),
         archived=bool(raw.get("archived")),
         head_sha=head_sha,
-        pushed_at=_ts(raw.get("last_activity_at")),
+        pushed_at=ts(raw.get("last_activity_at")),
         protected=protected,
         required_reviews=reviews,
         allows_force_push=force_push,
@@ -467,7 +438,7 @@ def _remote_repo(
         alerts=(),
         rhiza_managed=bool(ref),
         rhiza_ref=ref,
-        rhiza_behind=_behind_count(tags, ref),
+        rhiza_behind=behind_count(tags, ref),
         **ci_summary(workflows),
         workflows=workflows,
         coverage=_pipeline_coverage(pipeline),
@@ -513,7 +484,7 @@ def _pipeline_runs(
         WorkflowRun(
             name=job.get("name") or "unnamed",
             conclusion=normalise_gitlab_status(job.get("status") or ""),
-            finished_at=_ts(job.get("finished_at")),
+            finished_at=ts(job.get("finished_at")),
             duration=float(job.get("duration") or 0.0),
             url=job.get("web_url") or "",
         )

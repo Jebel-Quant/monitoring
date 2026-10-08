@@ -21,7 +21,8 @@ import pytest
 from test_coverage import StubAPI
 
 from jq_collector.config import Config
-from jq_collector.github import GitHub, _behind_count, _ts
+from jq_collector.forge import behind_count, ts
+from jq_collector.github import GitHub
 
 
 def client(handler, **cfg_overrides) -> GitHub:
@@ -561,11 +562,11 @@ def test_an_unreadable_closed_feed_yields_no_merges():
 @pytest.mark.parametrize("raw", [None, "", "not a date", "2026-13-45T99:99:99Z"])
 def test_an_unparseable_timestamp_is_zero(raw):
     """Zero sorts to the end rather than raising mid-refresh."""
-    assert _ts(raw) == 0.0
+    assert ts(raw) == 0.0
 
 
 def test_a_real_timestamp_is_parsed():
-    assert _ts("2026-08-01T00:00:00+00:00") > 0
+    assert ts("2026-08-01T00:00:00+00:00") > 0
 
 
 @pytest.mark.parametrize(
@@ -581,7 +582,7 @@ def test_a_real_timestamp_is_parsed():
 def test_releases_behind_is_none_when_the_ref_is_not_a_release(tags, ref, expected):
     """A branch or a sha is not "up to date" and not "behind" - it is unknown,
     and the board says so rather than implying either."""
-    assert _behind_count(tags, ref) == expected
+    assert behind_count(tags, ref) == expected
 
 
 def test_close_releases_the_client():

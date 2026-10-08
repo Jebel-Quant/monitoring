@@ -28,12 +28,13 @@ from .config import Config
 from .forge import (
     GOOD_CONCLUSIONS,
     INCONCLUSIVE_CONCLUSIONS,
+    behind_count,
     cached_ref,
     ci_summary,
     fan_out,
+    ts,
 )
 from .github_api import GitHub
-from .github_payloads import ts as _ts
 from .state import RemoteRepo, WorkflowRun
 
 log = logging.getLogger(__name__)
@@ -46,17 +47,6 @@ log = logging.getLogger(__name__)
 __all__ = ["GOOD_CONCLUSIONS", "INCONCLUSIVE_CONCLUSIONS", "GitHub", "collect"]
 
 _MAX_WORKERS = 8
-
-
-def _behind_count(tags: list[str], ref: str) -> int | None:
-    """How many releases were published after ``ref``.
-
-    Returns None when the pinned ref is not a published release tag - a branch
-    name or a sha - so the dashboard can show "unknown" instead of "current".
-    """
-    if not ref or ref not in tags:
-        return None
-    return tags.index(ref)
 
 
 def collect(
@@ -155,7 +145,7 @@ def _remote_repo(
         visibility=raw.get("visibility") or "unknown",
         archived=bool(raw.get("archived")),
         head_sha=head_sha,
-        pushed_at=_ts(raw.get("pushed_at")),
+        pushed_at=ts(raw.get("pushed_at")),
         protected=protected,
         required_reviews=required_reviews,
         allows_force_push=allows_force_push,
@@ -163,7 +153,7 @@ def _remote_repo(
         alerts=tuple(sorted((alerts or {}).items())),
         rhiza_managed=bool(ref),
         rhiza_ref=ref,
-        rhiza_behind=_behind_count(tags, ref),
+        rhiza_behind=behind_count(tags, ref),
         **ci_summary(workflows),
         workflows=workflows,
         coverage=coverage,
@@ -200,12 +190,12 @@ def _coverage(
 
 def _workflow_run(run: dict[str, Any]) -> WorkflowRun:
     """One entry of ``latest_runs`` as the board's WorkflowRun."""
-    finished = _ts(run.get("updated_at"))
+    finished = ts(run.get("updated_at"))
     return WorkflowRun(
         name=run.get("_name") or run.get("name") or "unnamed",
         conclusion=run.get("conclusion") or "",
         finished_at=finished,
-        duration=max(0.0, finished - _ts(run.get("run_started_at"))),
+        duration=max(0.0, finished - ts(run.get("run_started_at"))),
         url=run.get("html_url") or "",
     )
 
