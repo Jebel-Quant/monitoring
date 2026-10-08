@@ -550,23 +550,37 @@ def _add_merged(f: _Families, ident: list[str], remote: RemoteRepo) -> None:
 
 
 def _add_local(f: _Families, ident: list[str], local: LocalRepo, remote: RemoteRepo | None) -> None:
+    _add_working_copy(f, ident, local, remote)
+    _add_upstream(f, ident, local, remote)
+    _add_size(f, ident, local)
+
+
+def _add_working_copy(
+    f: _Families, ident: list[str], local: LocalRepo, remote: RemoteRepo | None
+) -> None:
+    """What the clone itself looks like: branch, uncommitted work, last commit."""
     f.local_branch.add_metric([*ident, local.branch or "unknown"], 1)
     f.on_default.add_metric(ident, 1 if local.branch == _default_branch(remote) else 0)
     f.dirty.add_metric(ident, local.dirty_files)
     f.untracked.add_metric(ident, local.untracked_files)
+    f.stashes.add_metric(ident, local.stashes)
+    f.last_commit.add_metric(ident, local.last_commit_at)
+
+
+def _add_upstream(
+    f: _Families, ident: list[str], local: LocalRepo, remote: RemoteRepo | None
+) -> None:
+    """How far the clone is from its upstream. Each is absent when unknown, not zero."""
     if local.ahead is not None:
         f.ahead.add_metric(ident, local.ahead)
     if local.behind is not None:
         f.behind_local.add_metric(ident, local.behind)
     if local.rhiza_ref:
         f.local_ref.add_metric([*ident, local.rhiza_ref], 1)
-    f.stashes.add_metric(ident, local.stashes)
-    f.last_commit.add_metric(ident, local.last_commit_at)
     if local.fetch_age is not None:
         f.fetch_age.add_metric(ident, local.fetch_age)
     if local.default_branch_sha and remote and remote.head_sha:
         f.synced.add_metric(ident, 1 if local.default_branch_sha == remote.head_sha else 0)
-    _add_size(f, ident, local)
 
 
 def _add_size(f: _Families, ident: list[str], local: LocalRepo) -> None:

@@ -50,20 +50,36 @@ def active_workflow_names(workflows: list[dict[str, Any]]) -> dict[int, str]:
     {1: 'a.yml', 2: 'b.yml'}
     """
     active = {
-        w["id"]: (w.get("name") or w.get("path") or str(w["id"]))
-        for w in workflows
-        if w.get("state") == "active" and "id" in w
+        w["id"]: _display_name(w) for w in workflows if w.get("state") == "active" and "id" in w
     }
-    paths = {w["id"]: w.get("path") for w in workflows if "id" in w}
-    seen: dict[str, int] = {}
-    for wid, name in list(active.items()):
-        if name not in seen:
-            seen[name] = wid
-            continue
-        for other in (wid, seen[name]):
-            if paths.get(other):
-                active[other] = paths[other]
-    return active
+    paths = {w["id"]: w.get("path") or "" for w in workflows if "id" in w}
+    return _disambiguated(active, paths)
+
+
+def _display_name(workflow: dict[str, Any]) -> str:
+    """A workflow's name, else its path, else its id - never empty."""
+    return str(workflow.get("name") or workflow.get("path") or workflow["id"])
+
+
+def _disambiguated(names: dict[int, str], paths: dict[int, str]) -> dict[int, str]:
+    """``names`` with every name two ids share replaced by each one's path.
+
+    An id with no path keeps its name: a clash it cannot resolve is better
+    than a blank label.
+
+    >>> _disambiguated({1: "CI", 2: "CI", 3: "Lint"}, {1: "a.yml", 2: ""})
+    {1: 'a.yml', 2: 'CI', 3: 'Lint'}
+    """
+    first: dict[str, int] = {}
+    clashing: set[int] = set()
+    for wid, name in names.items():
+        if name in first:
+            clashing.update((wid, first[name]))
+        else:
+            first[name] = wid
+    return {
+        wid: (paths.get(wid) or name) if wid in clashing else name for wid, name in names.items()
+    }
 
 
 def inconclusive(run: dict[str, Any]) -> bool:

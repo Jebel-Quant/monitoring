@@ -264,19 +264,27 @@ class GitHub:
         )
         feed = data.get("workflow_runs") if isinstance(data, dict) else None
         newest = newest_per_workflow(feed or [], active)
-
-        # One targeted call per workflow the feed missed. Quiet repos pay
-        # nothing; only the busy ones do, and only for what was actually hidden.
-        for wid in active or ():
-            if wid not in newest:
-                conclusive = self._newest_conclusive(full_name, branch, wid)
-                if conclusive is not None:
-                    newest[wid] = conclusive
-
+        names = active or {}
+        self._backfill(full_name, branch, names, newest)
         return [
-            {**run, "_name": (active or {}).get(wid) or run.get("name") or "unnamed"}
+            {**run, "_name": names.get(wid) or run.get("name") or "unnamed"}
             for wid, run in newest.items()
         ]
+
+    def _backfill(
+        self, full_name: str, branch: str, active: dict[int, str], newest: dict[Any, dict[str, Any]]
+    ) -> None:
+        """Add to ``newest`` each active workflow the runs feed missed.
+
+        One targeted call per missing workflow, in listing order. Quiet repos
+        pay nothing; only the busy ones do, and only for what was actually hidden.
+        """
+        for wid in active:
+            if wid in newest:
+                continue
+            conclusive = self._newest_conclusive(full_name, branch, wid)
+            if conclusive is not None:
+                newest[wid] = conclusive
 
     def _newest_conclusive(self, full_name: str, branch: str, wid: int) -> dict[str, Any] | None:
         """The newest run of one workflow that reached a verdict, if any."""
