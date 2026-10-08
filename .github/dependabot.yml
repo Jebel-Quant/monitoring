@@ -1,0 +1,35 @@
+# Proposes bumps for everything this repo pins, so a pin stays a decision
+# rather than becoming an accident. audit.yml says when a locked package is
+# known-vulnerable; this is what moves it, and the two things audit.yml cannot
+# see at all - the Prometheus and Grafana images the Dockerfile copies out of,
+# and the SHA-pinned actions in every workflow.
+#
+# Weekly, like audit.yml, and grouped so each ecosystem is one pull request a
+# week rather than one per package.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      images:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+
+  # The lock CI installs --frozen and the image is built from, so a bump here
+  # runs the full collector suite before it can merge.
+  - package-ecosystem: uv
+    directory: /collector
+    schedule:
+      interval: weekly
+    groups:
+      collector:
+        patterns: ['*']
