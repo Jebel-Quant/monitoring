@@ -26,6 +26,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
+import yaml
 
 # coverage.xml comes out of another repo's CI artifact, so it is untrusted
 # input. defusedxml refuses entity declarations and external references, and
@@ -238,8 +239,6 @@ class GitHub:
         if not isinstance(data, dict) or "content" not in data:
             return ""
         try:
-            import yaml
-
             raw = base64.b64decode(data["content"]).decode("utf-8")
             parsed = yaml.safe_load(raw) or {}
         except Exception as exc:  # noqa: BLE001 - malformed pointer is data

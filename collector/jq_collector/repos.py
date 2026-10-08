@@ -33,6 +33,8 @@ import logging
 import os
 from typing import Any
 
+import yaml
+
 from . import origin
 
 log = logging.getLogger(__name__)
@@ -351,8 +353,6 @@ def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None, str]
 
 def _read_entries(source: str) -> list[Any]:
     """The non-empty ``repos:`` list of ``source``, or a FleetError saying why not."""
-    import yaml
-
     try:
         with open(source, encoding="utf-8") as handle:
             text = handle.read()

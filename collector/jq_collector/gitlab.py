@@ -44,6 +44,7 @@ from typing import Any
 from urllib.parse import quote
 
 import httpx
+import yaml
 
 from .config import Config
 from .forge import GOOD_CONCLUSIONS, normalise_gitlab_status
@@ -192,8 +193,6 @@ class GitLab:
 
     def template_ref(self, full_name: str, branch: str) -> str:
         """The ref pinned in the repo's template pointer, if it is managed."""
-        import yaml
-
         pointer = quote(self._cfg.template_pointer, safe="")
         raw = self._text(
             f"/projects/{_pid(full_name)}/repository/files/{pointer}/raw",
