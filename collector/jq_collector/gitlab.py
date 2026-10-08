@@ -37,7 +37,6 @@ a green tile.
 
 from __future__ import annotations
 
-import concurrent.futures
 import logging
 from datetime import datetime
 from typing import Any
@@ -47,7 +46,7 @@ import httpx
 import yaml
 
 from .config import Config
-from .forge import GOOD_CONCLUSIONS, normalise_gitlab_status
+from .forge import cached_ref, ci_summary, fan_out, normalise_gitlab_status
 from .state import MergedPull, PullRequest, RemoteRepo, WorkflowRun
 
 log = logging.getLogger(__name__)
@@ -413,113 +412,110 @@ def collect(
     api = GitLab(cfg)
 
     listing = api.list_projects(fleet)
-    excluded = frozenset(
-        r["path_with_namespace"]
-        for r in listing
-        if (r.get("archived") and not cfg.include_archived)
-        or cfg.is_ignored(*r["path_with_namespace"].rsplit("/", 1))
-        or (cfg.public_only and _visibility(r) != "public")
-    )
+    excluded = frozenset(r["path_with_namespace"] for r in listing if _dropped(cfg, r))
     projects = [r for r in listing if r["path_with_namespace"] not in excluded]
 
     def one(raw: dict[str, Any]) -> RemoteRepo:
-        full_name = raw["path_with_namespace"]
-        branch = raw.get("default_branch") or "main"
-        head_sha = api.branch_sha(full_name, branch)
+        return _remote_repo(api, cfg, raw, tags, ref_cache)
 
-        cached = ref_cache.get(full_name)
-        if cached is not None and head_sha and cached[0] == head_sha:
-            ref = cached[1]
-        else:
-            ref = api.template_ref(full_name, branch)
+    return fan_out(projects, "path_with_namespace", one, log, _MAX_WORKERS), api, excluded
 
-        pipeline = api.latest_pipeline(full_name, branch) or {}
-        coverage = pipeline.get("coverage")
-        # GitLab reports coverage as a string percentage, and as null when the
-        # project has no coverage regex configured.
-        try:
-            coverage = float(coverage) if coverage is not None else None
-        except (TypeError, ValueError):
-            coverage = None
 
-        workflows: tuple[WorkflowRun, ...] = ()
-        if pipeline.get("id") is not None:
-            workflows = tuple(
-                WorkflowRun(
-                    name=job.get("name") or "unnamed",
-                    conclusion=normalise_gitlab_status(job.get("status") or ""),
-                    finished_at=_ts(job.get("finished_at")),
-                    duration=float(job.get("duration") or 0.0),
-                    url=job.get("web_url") or "",
-                )
-                for job in api.pipeline_jobs(full_name, pipeline["id"])
-            )
+def _dropped(cfg: Config, raw: dict[str, Any]) -> bool:
+    """Whether a listed project is left off the board - the same rules as GitHub's."""
+    if raw.get("archived") and not cfg.include_archived:
+        return True
+    if cfg.is_ignored(*raw["path_with_namespace"].rsplit("/", 1)):
+        return True
+    return cfg.public_only and _visibility(raw) != "public"
 
-        # Identical rule to github.collect: the branch is red if ANY job's
-        # latest run is red, and the run worth showing is that failure rather
-        # than whichever job happens to have finished most recently.
-        failing = sorted(
-            (w for w in workflows if w.conclusion and w.conclusion not in GOOD_CONCLUSIONS),
-            key=lambda w: w.finished_at,
-            reverse=True,
-        )
-        rest = sorted(workflows, key=lambda w: w.finished_at, reverse=True)
-        representative = failing[0] if failing else (rest[0] if rest else None)
 
-        protected, force_push, reviews = _protection(api.protected_branch(full_name, branch))
+def _remote_repo(
+    api: GitLab,
+    cfg: Config,
+    raw: dict[str, Any],
+    tags: list[str],
+    ref_cache: dict[str, tuple[str, str]],
+) -> RemoteRepo:
+    """Everything the board shows about one project, one call per question."""
+    full_name = raw["path_with_namespace"]
+    branch = raw.get("default_branch") or "main"
+    head_sha = api.branch_sha(full_name, branch)
+    ref = cached_ref(ref_cache, full_name, head_sha, lambda: api.template_ref(full_name, branch))
+    pipeline = api.latest_pipeline(full_name, branch) or {}
+    workflows = _pipeline_runs(api, full_name, pipeline)
+    protected, force_push, reviews = _protection(api.protected_branch(full_name, branch))
+    pulls_total, pulls = api.open_merge_requests(full_name)
+    merged = api.recent_merges(full_name, cfg.recent_merges_per_repo)
 
-        pulls_total, pulls = api.open_merge_requests(full_name)
-        merged = api.recent_merges(full_name, cfg.recent_merges_per_repo)
+    return RemoteRepo(
+        name=raw.get("path") or full_name.rsplit("/", 1)[-1],
+        owner=full_name.rsplit("/", 1)[0],
+        forge="gitlab",
+        url=raw.get("web_url") or "",
+        pulls_url=f"{raw['web_url']}/-/merge_requests" if raw.get("web_url") else "",
+        default_branch=branch,
+        visibility=_visibility(raw),
+        archived=bool(raw.get("archived")),
+        head_sha=head_sha,
+        pushed_at=_ts(raw.get("last_activity_at")),
+        protected=protected,
+        required_reviews=reviews,
+        allows_force_push=force_push,
+        # No counterpart at most tiers - see the module docstring.
+        alerts_enabled=False,
+        alerts=(),
+        rhiza_managed=bool(ref),
+        rhiza_ref=ref,
+        rhiza_behind=_behind_count(tags, ref),
+        **ci_summary(workflows),
+        workflows=workflows,
+        coverage=_pipeline_coverage(pipeline),
+        # Lines are not reported by GitLab's coverage field. Zero here means
+        # the dashboard shows a percentage without a line count rather than
+        # inventing one.
+        coverage_lines=0,
+        coverage_artifact=0,
         # Unlike GitHub's, GitLab's open_issues_count already excludes merge
         # requests, so there is nothing to subtract.
-        open_issues = max(0, int(raw.get("open_issues_count") or 0))
+        open_issues=max(0, int(raw.get("open_issues_count") or 0)),
+        open_pulls_total=pulls_total,
+        pulls=tuple(pulls),
+        merged=tuple(merged),
+    )
 
-        return RemoteRepo(
-            name=raw.get("path") or full_name.rsplit("/", 1)[-1],
-            owner=full_name.rsplit("/", 1)[0],
-            forge="gitlab",
-            url=raw.get("web_url") or "",
-            pulls_url=f"{raw['web_url']}/-/merge_requests" if raw.get("web_url") else "",
-            default_branch=branch,
-            visibility=_visibility(raw),
-            archived=bool(raw.get("archived")),
-            head_sha=head_sha,
-            pushed_at=_ts(raw.get("last_activity_at")),
-            protected=protected,
-            required_reviews=reviews,
-            allows_force_push=force_push,
-            # No counterpart at most tiers - see the module docstring.
-            alerts_enabled=False,
-            alerts=(),
-            rhiza_managed=bool(ref),
-            rhiza_ref=ref,
-            rhiza_behind=_behind_count(tags, ref),
-            ci_conclusion=representative.conclusion if representative else "",
-            ci_workflow=representative.name if representative else "",
-            ci_finished_at=representative.finished_at if representative else 0.0,
-            ci_duration=representative.duration if representative else 0.0,
-            ci_url=representative.url if representative else "",
-            workflows=workflows,
-            coverage=coverage,
-            # Lines are not reported by GitLab's coverage field. Zero here means
-            # the dashboard shows a percentage without a line count rather than
-            # inventing one.
-            coverage_lines=0,
-            coverage_artifact=0,
-            open_issues=open_issues,
-            open_pulls_total=pulls_total,
-            pulls=tuple(pulls),
-            merged=tuple(merged),
+
+def _pipeline_coverage(pipeline: dict[str, Any]) -> float | None:
+    """The pipeline's coverage as a percentage, or None.
+
+    GitLab reports coverage as a string percentage, and as null when the
+    project has no coverage regex configured.
+
+    >>> _pipeline_coverage({"coverage": "87.5"}), _pipeline_coverage({"coverage": None})
+    (87.5, None)
+    >>> _pipeline_coverage({"coverage": "n/a"}) is None
+    True
+    """
+    coverage = pipeline.get("coverage")
+    try:
+        return float(coverage) if coverage is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _pipeline_runs(
+    api: GitLab, full_name: str, pipeline: dict[str, Any]
+) -> tuple[WorkflowRun, ...]:
+    """The newest pipeline's jobs as WorkflowRuns - none when there is no pipeline."""
+    if pipeline.get("id") is None:
+        return ()
+    return tuple(
+        WorkflowRun(
+            name=job.get("name") or "unnamed",
+            conclusion=normalise_gitlab_status(job.get("status") or ""),
+            finished_at=_ts(job.get("finished_at")),
+            duration=float(job.get("duration") or 0.0),
+            url=job.get("web_url") or "",
         )
-
-    result: dict[str, RemoteRepo] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
-        futures = {pool.submit(one, raw): raw["path_with_namespace"] for raw in projects}
-        for future in concurrent.futures.as_completed(futures):
-            full_name = futures[future]
-            try:
-                result[full_name] = future.result()
-            except Exception as exc:  # noqa: BLE001 - one bad repo must not sink the refresh
-                log.warning("repo %s failed: %s", full_name, exc)
-
-    return result, api, excluded
+        for job in api.pipeline_jobs(full_name, pipeline["id"])
+    )

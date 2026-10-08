@@ -21,12 +21,17 @@ RemoteRepo.
 
 from __future__ import annotations
 
-import concurrent.futures
 import logging
 from typing import Any
 
 from .config import Config
-from .forge import GOOD_CONCLUSIONS, INCONCLUSIVE_CONCLUSIONS
+from .forge import (
+    GOOD_CONCLUSIONS,
+    INCONCLUSIVE_CONCLUSIONS,
+    cached_ref,
+    ci_summary,
+    fan_out,
+)
 from .github_api import GitHub
 from .github_payloads import ts as _ts
 from .state import RemoteRepo, WorkflowRun
@@ -94,119 +99,127 @@ def collect(
     # Dropped repos are reported back so the local scan can skip their clones
     # too - otherwise a checkout keeps a dead repo on the board after the GitHub
     # half has correctly stopped reporting it.
-    #
-    # JQ_IGNORE is applied here as well as in the local scan. It used to be
-    # honoured only by the scan, via Config.wants(), so ignoring a repo silently
-    # removed its working-copy rows while leaving every CI, drift and
-    # pull-request series in place.
     listing = api.list_repos(fleet)
-    excluded = frozenset(
-        r["full_name"]
-        for r in listing
-        if (r.get("archived") and not cfg.include_archived)
-        or cfg.is_ignored(*r["full_name"].split("/", 1))
-        # `visibility` covers private and internal; `private` is the older flag.
-        or (cfg.public_only and (r.get("private") or r.get("visibility") != "public"))
-    )
+    excluded = frozenset(r["full_name"] for r in listing if _dropped(cfg, r))
     repos = [r for r in listing if r["full_name"] not in excluded]
 
     def one(raw: dict[str, Any]) -> RemoteRepo:
-        full_name = raw["full_name"]
-        owner = (raw.get("owner") or {}).get("login") or full_name.split("/", 1)[0]
-        branch = raw.get("default_branch") or "main"
-        head_sha = api.branch_sha(full_name, branch)
+        return _remote_repo(api, cfg, raw, tags, ref_cache, coverage_cache)
 
-        cached = ref_cache.get(full_name)
-        if cached is not None and head_sha and cached[0] == head_sha:
-            ref = cached[1]
-        else:
-            ref = api.template_ref(full_name)
+    return fan_out(repos, "full_name", one, log, _MAX_WORKERS), api, tags, excluded
 
-        artifact = api.coverage_artifact(full_name, branch)
-        cached_coverage = coverage_cache.get(full_name)
-        if artifact and cached_coverage is not None and cached_coverage[0] == artifact:
-            measured = cached_coverage[1]
-        elif artifact:
-            measured = api.coverage_percent(full_name, artifact)
-        else:
-            measured = None
-        coverage, coverage_lines = measured if measured else (None, 0)
 
-        workflows = tuple(
-            WorkflowRun(
-                name=r.get("_name") or r.get("name") or "unnamed",
-                conclusion=r.get("conclusion") or "",
-                finished_at=_ts(r.get("updated_at")),
-                duration=max(0.0, _ts(r.get("updated_at")) - _ts(r.get("run_started_at"))),
-                url=r.get("html_url") or "",
-            )
-            for r in api.latest_runs(full_name, branch)
-        )
-        # The branch is red if ANY workflow's latest run is red, and the run
-        # worth showing is that failure - not whichever workflow happens to have
-        # run most recently.
-        failing = sorted(
-            (w for w in workflows if w.conclusion and w.conclusion not in GOOD_CONCLUSIONS),
-            key=lambda w: w.finished_at,
-            reverse=True,
-        )
-        rest = sorted(workflows, key=lambda w: w.finished_at, reverse=True)
-        representative = failing[0] if failing else (rest[0] if rest else None)
+def _dropped(cfg: Config, raw: dict[str, Any]) -> bool:
+    """Whether a listed repo is left off the board.
 
-        protection, protection_known = api.branch_protection(full_name, branch)
-        reviews = (protection or {}).get("required_pull_request_reviews") or {}
-        force = (protection or {}).get("allow_force_pushes") or {}
+    JQ_IGNORE is applied here as well as in the local scan. It used to be
+    honoured only by the scan, via Config.wants(), so ignoring a repo silently
+    removed its working-copy rows while leaving every CI, drift and
+    pull-request series in place.
+    """
+    if raw.get("archived") and not cfg.include_archived:
+        return True
+    if cfg.is_ignored(*raw["full_name"].split("/", 1)):
+        return True
+    # `visibility` covers private and internal; `private` is the older flag.
+    return cfg.public_only and bool(raw.get("private") or raw.get("visibility") != "public")
 
-        alerts = api.open_alerts(full_name)
 
-        pulls_total, pulls = api.open_pulls(full_name)
-        merged = api.recent_merges(full_name, cfg.recent_merges_per_repo)
+def _remote_repo(
+    api: GitHub,
+    cfg: Config,
+    raw: dict[str, Any],
+    tags: list[str],
+    ref_cache: dict[str, tuple[str, str]],
+    coverage_cache: dict[str, tuple[int, tuple[float, int] | None]],
+) -> RemoteRepo:
+    """Everything the board shows about one repo, one call per question."""
+    full_name = raw["full_name"]
+    branch = raw.get("default_branch") or "main"
+    head_sha = api.branch_sha(full_name, branch)
+    ref = cached_ref(ref_cache, full_name, head_sha, lambda: api.template_ref(full_name))
+    artifact, coverage, coverage_lines = _coverage(api, coverage_cache, full_name, branch)
+    workflows = tuple(_workflow_run(r) for r in api.latest_runs(full_name, branch))
+    protected, required_reviews, allows_force_push = _protection(api, full_name, branch)
+    alerts = api.open_alerts(full_name)
+    pulls_total, pulls = api.open_pulls(full_name)
+    merged = api.recent_merges(full_name, cfg.recent_merges_per_repo)
+
+    return RemoteRepo(
+        name=raw["name"],
+        owner=(raw.get("owner") or {}).get("login") or full_name.split("/", 1)[0],
+        forge="github",
+        url=raw.get("html_url") or "",
+        pulls_url=f"{raw['html_url']}/pulls" if raw.get("html_url") else "",
+        default_branch=branch,
+        visibility=raw.get("visibility") or "unknown",
+        archived=bool(raw.get("archived")),
+        head_sha=head_sha,
+        pushed_at=_ts(raw.get("pushed_at")),
+        protected=protected,
+        required_reviews=required_reviews,
+        allows_force_push=allows_force_push,
+        alerts_enabled=alerts is not None,
+        alerts=tuple(sorted((alerts or {}).items())),
+        rhiza_managed=bool(ref),
+        rhiza_ref=ref,
+        rhiza_behind=_behind_count(tags, ref),
+        **ci_summary(workflows),
+        workflows=workflows,
+        coverage=coverage,
+        coverage_lines=coverage_lines,
+        coverage_artifact=artifact,
         # GitHub's open_issues_count includes pull requests; subtract them to
         # get the number a human means by "open issues". No extra API call.
-        open_issues = max(0, int(raw.get("open_issues_count") or 0) - pulls_total)
+        open_issues=max(0, int(raw.get("open_issues_count") or 0) - pulls_total),
+        open_pulls_total=pulls_total,
+        pulls=tuple(pulls),
+        merged=tuple(merged),
+    )
 
-        return RemoteRepo(
-            name=raw["name"],
-            owner=owner,
-            forge="github",
-            url=raw.get("html_url") or "",
-            pulls_url=f"{raw['html_url']}/pulls" if raw.get("html_url") else "",
-            default_branch=branch,
-            visibility=raw.get("visibility") or "unknown",
-            archived=bool(raw.get("archived")),
-            head_sha=head_sha,
-            pushed_at=_ts(raw.get("pushed_at")),
-            protected=(protection is not None) if protection_known else None,
-            required_reviews=int(reviews.get("required_approving_review_count") or 0),
-            allows_force_push=bool(force.get("enabled")),
-            alerts_enabled=alerts is not None,
-            alerts=tuple(sorted((alerts or {}).items())),
-            rhiza_managed=bool(ref),
-            rhiza_ref=ref,
-            rhiza_behind=_behind_count(tags, ref),
-            ci_conclusion=representative.conclusion if representative else "",
-            ci_workflow=representative.name if representative else "",
-            ci_finished_at=representative.finished_at if representative else 0.0,
-            ci_duration=representative.duration if representative else 0.0,
-            ci_url=representative.url if representative else "",
-            workflows=workflows,
-            coverage=coverage,
-            coverage_lines=coverage_lines,
-            coverage_artifact=artifact,
-            open_issues=open_issues,
-            open_pulls_total=pulls_total,
-            pulls=tuple(pulls),
-            merged=tuple(merged),
-        )
 
-    result: dict[str, RemoteRepo] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
-        futures = {pool.submit(one, raw): raw["full_name"] for raw in repos}
-        for future in concurrent.futures.as_completed(futures):
-            full_name = futures[future]
-            try:
-                result[full_name] = future.result()
-            except Exception as exc:  # noqa: BLE001 - one bad repo must not sink the refresh
-                log.warning("repo %s failed: %s", full_name, exc)
+def _coverage(
+    api: GitHub,
+    coverage_cache: dict[str, tuple[int, tuple[float, int] | None]],
+    full_name: str,
+    branch: str,
+) -> tuple[int, float | None, int]:
+    """``(artifact id, percent, lines)``, downloading only a report not yet seen."""
+    artifact = api.coverage_artifact(full_name, branch)
+    if not artifact:
+        return 0, None, 0
+    cached = coverage_cache.get(full_name)
+    if cached is not None and cached[0] == artifact:
+        measured = cached[1]
+    else:
+        measured = api.coverage_percent(full_name, artifact)
+    if measured is None:
+        return artifact, None, 0
+    return artifact, measured[0], measured[1]
 
-    return result, api, tags, excluded
+
+def _workflow_run(run: dict[str, Any]) -> WorkflowRun:
+    """One entry of ``latest_runs`` as the board's WorkflowRun."""
+    finished = _ts(run.get("updated_at"))
+    return WorkflowRun(
+        name=run.get("_name") or run.get("name") or "unnamed",
+        conclusion=run.get("conclusion") or "",
+        finished_at=finished,
+        duration=max(0.0, finished - _ts(run.get("run_started_at"))),
+        url=run.get("html_url") or "",
+    )
+
+
+def _protection(api: GitHub, full_name: str, branch: str) -> tuple[bool | None, int, bool]:
+    """``(protected, required reviews, force pushes allowed)`` for the branch.
+
+    ``protected`` is None when GitHub would not say - see branch_protection.
+    """
+    protection, known = api.branch_protection(full_name, branch)
+    reviews = (protection or {}).get("required_pull_request_reviews") or {}
+    force = (protection or {}).get("allow_force_pushes") or {}
+    return (
+        (protection is not None) if known else None,
+        int(reviews.get("required_approving_review_count") or 0),
+        bool(force.get("enabled")),
+    )

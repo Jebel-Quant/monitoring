@@ -336,12 +336,7 @@ def _no_checkout(index: int, named: str, raw_path: Any, path: str) -> str:
 
 def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None, str]:
     """One entry -> ``(namespace/name, checkout path or None, forge)``."""
-    # `- ~/repos/foo` is accepted as shorthand for `- path: ~/repos/foo`.
-    if isinstance(item, str):
-        item = {"path": item}
-    if not isinstance(item, dict):
-        raise FleetError(f"entry {index} is neither a path nor a mapping: {item!r}")
-
+    item = _as_mapping(item, index)
     named = str(item.get("repo") or "").strip()
     raw_path = item.get("path")
     declared = _declared_forge(item, index)
@@ -354,6 +349,24 @@ def _entry(item: Any, index: int, host_root: str) -> tuple[str, str | None, str]
     if not _is_checkout(path):
         return _no_checkout(index, named, raw_path, path), None, declared or origin.GITHUB
 
+    return _from_origin(index, named, path, declared)
+
+
+def _as_mapping(item: Any, index: int) -> dict[str, Any]:
+    """An entry as a mapping. ``- ~/repos/foo`` is shorthand for ``- path: ~/repos/foo``.
+
+    >>> _as_mapping("~/repos/foo", 1)
+    {'path': '~/repos/foo'}
+    """
+    if isinstance(item, str):
+        return {"path": item}
+    if not isinstance(item, dict):
+        raise FleetError(f"entry {index} is neither a path nor a mapping: {item!r}")
+    return item
+
+
+def _from_origin(index: int, named: str, path: str, declared: str | None) -> tuple[str, str, str]:
+    """A checkout's name and forge, from ``repo:`` if given, else from its origin."""
     parsed = origin.read(path)
 
     if "/" in named:
@@ -412,13 +425,7 @@ def load(
     says which API each one is read through.
     """
     entries = _read_entries(source)
-
-    fleet: list[str] = []
-    paths: dict[str, str] = {}
-    forges: dict[str, str] = {}
-    # Named outright rather than swept up by a folder, which is what decides
-    # who wins when both describe the same repo.
-    named: set[str] = set()
+    taken = _Fleet()
     claimed = _claimed_paths(entries, host_root)
     for index, item in enumerate(entries, start=1):
         for entry, swept in _expand(item, index, host_root, claimed):
@@ -433,50 +440,65 @@ def load(
                 # not the deliberate statement that a listed path is.
                 log.warning("skipping %s: %s", entry["path"], exc)
                 continue
+            taken.add(full_name, path, forge, swept)
 
-            # Exactly one of the two entries names the repo outright: a folder
-            # overlapping an entry, which is not the duplicate case below.
-            overlap = (not swept) != (full_name in named)
-            if full_name in forges and overlap:
-                # One entry names this repo outright and the other is a folder
-                # that swept it up - `- repo: org/x` next to the folder org/x
-                # is checked out in. The entry written for the repo itself is
-                # the deliberate statement, so it decides the name and the
-                # forge whichever order the two were written in; the folder can
-                # still supply the checkout path, since that is where the repo
-                # is on disk and the other entry may not have said.
-                #
-                # (A folder never reaches here for a checkout some entry names
-                # by `path` - it skips those outright, which is what lets a
-                # `repo:` override rename one repo inside a listed folder.)
-                log.info("%s: named outright, so the folder does not list it too", full_name)
-                if not swept:
-                    named.add(full_name)
-                    forges[full_name] = forge
-                if path is not None:
-                    paths[full_name] = path if not swept else paths.get(full_name, path)
-                continue
-
-            if full_name in forges:
-                # Two forges can host the same `namespace/name`, and the board's
-                # whole label scheme is that one `repo` value is one repo. Refusing
-                # is the same choice the duplicate case has always made: a merged
-                # pair would report one repo's CI under the other's name, and read
-                # as a working board while doing it.
-                raise _listed_twice(
-                    full_name, (forges[full_name], paths.get(full_name)), (forge, path)
-                )
-
-            fleet.append(full_name)
-            forges[full_name] = forge
-            if not swept:
-                named.add(full_name)
-            if path is not None:
-                paths[full_name] = path
-
-    if not fleet:
+    if not taken.fleet:
         # Reachable only when every checkout a folder turned up was skipped for
         # want of an origin: the file said something, and none of it survived.
         raise FleetError(f"{source} named no repo the collector could identify")
 
-    return tuple(fleet), paths, forges
+    return tuple(taken.fleet), taken.paths, taken.forges
+
+
+class _Fleet:
+    """The repos ``load`` has taken so far, and which of them were named outright."""
+
+    def __init__(self) -> None:
+        self.fleet: list[str] = []
+        self.paths: dict[str, str] = {}
+        self.forges: dict[str, str] = {}
+        # Named outright rather than swept up by a folder, which is what decides
+        # who wins when both describe the same repo.
+        self.named: set[str] = set()
+
+    def add(self, full_name: str, path: str | None, forge: str, swept: bool) -> None:
+        """Take one resolved entry, or refuse it as listed twice."""
+        if full_name in self.forges:
+            self._again(full_name, path, forge, swept)
+            return
+        self.fleet.append(full_name)
+        self.forges[full_name] = forge
+        if not swept:
+            self.named.add(full_name)
+        if path is not None:
+            self.paths[full_name] = path
+
+    def _again(self, full_name: str, path: str | None, forge: str, swept: bool) -> None:
+        """A repo already taken, met a second time."""
+        # Exactly one of the two entries names the repo outright: a folder
+        # overlapping an entry, which is not the duplicate case below.
+        if (not swept) == (full_name in self.named):
+            # Two forges can host the same `namespace/name`, and the board's
+            # whole label scheme is that one `repo` value is one repo. Refusing
+            # is the same choice the duplicate case has always made: a merged
+            # pair would report one repo's CI under the other's name, and read
+            # as a working board while doing it.
+            raise _listed_twice(
+                full_name, (self.forges[full_name], self.paths.get(full_name)), (forge, path)
+            )
+        # One entry names this repo outright and the other is a folder that
+        # swept it up - `- repo: org/x` next to the folder org/x is checked out
+        # in. The entry written for the repo itself is the deliberate statement,
+        # so it decides the name and the forge whichever order the two were
+        # written in; the folder can still supply the checkout path, since that
+        # is where the repo is on disk and the other entry may not have said.
+        #
+        # (A folder never reaches here for a checkout some entry names by
+        # `path` - it skips those outright, which is what lets a `repo:`
+        # override rename one repo inside a listed folder.)
+        log.info("%s: named outright, so the folder does not list it too", full_name)
+        if not swept:
+            self.named.add(full_name)
+            self.forges[full_name] = forge
+        if path is not None:
+            self.paths[full_name] = path if not swept else self.paths.get(full_name, path)
