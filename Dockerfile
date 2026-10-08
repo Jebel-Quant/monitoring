@@ -10,12 +10,17 @@
 #
 #   docker build -t jq-monitoring .
 
-FROM prom/prometheus:v3.15.0 AS prometheus
+# Each base pinned by digest as well as tag. A tag can be re-pushed - the
+# python one is, on every patch release and Debian update - so the tag alone
+# lets two builds of one commit ship different bases. The digests are the
+# multi-arch index, so both platforms below resolve from the same pin, and
+# Dependabot's docker ecosystem moves tag and digest together.
+FROM prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e AS prometheus
 # The Ubuntu variant, not the default Alpine one: the runtime below is Debian,
 # and a musl-linked grafana will not start there.
-FROM grafana/grafana:13.2.3-ubuntu AS grafana
+FROM grafana/grafana:13.2.3-ubuntu@sha256:efa8e935921096c08e4636c320d2f955cb843fa0889f471022e0d568af780d3f AS grafana
 
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
 
 # ghcr.io reads the package page's description from these, and shows a "add
 # LABEL org.opencontainers.image.description" hint until they exist. CI passes
