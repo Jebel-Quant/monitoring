@@ -82,6 +82,7 @@ def resolve_path(raw: str, host_root: str) -> str:
 
 
 def _is_checkout(path: str) -> bool:
+    """Whether ``path`` is a git checkout, plain or a worktree."""
     # `.git` is a directory in a plain checkout and a file in a worktree.
     return os.path.exists(os.path.join(path, ".git"))
 

@@ -234,6 +234,7 @@ def _commit_counts(path: str, ref: str) -> tuple[int, int | None, str]:
 
 
 def _ahead_behind(path: str) -> tuple[int | None, int | None]:
+    """``(ahead, behind)`` against the branch's upstream, or ``(None, None)`` with no upstream."""
     counts = _git(path, "rev-list", "--left-right", "--count", "@{upstream}...HEAD")
     if not counts:
         return None, None
