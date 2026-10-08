@@ -159,6 +159,8 @@ jobs:
           # nothing below may depend on it having answered.
           docker run -d --name fleet \
             -p 127.0.0.1:9109:9109 \
+            -p 127.0.0.1:9090:9090 \
+            -p 127.0.0.1:3000:3000 \
             -v "$PWD/repos.yml:/config/repos.yml:ro" \
             -v "$PWD/home:/host:ro" \
             jq-monitoring:ci
@@ -183,6 +185,47 @@ jobs:
           # here - so `repo="Jebel-Quant/actions"` is legitimately absent from
           # /metrics and asserting on it would be testing GitHub, not this.
           grep -q 'fleet: 2 repos, 1 with a checkout' logs.txt
+
+      # The step above only ever asked the collector. The image's other two
+      # processes are what a user actually looks at, and a Grafana that starts
+      # but fails to provision the board stays up - so the entrypoint's "any
+      # exit takes the container down" never fires. A two-major Grafana and
+      # Prometheus bump went through CI green without either being asked
+      # anything; this is the step that would have asked.
+      - name: Prometheus scrapes it and Grafana serves the board
+        run: |
+          # Polls until $1 answers 2xx, writing the body to $2. Bails out with
+          # the logs as soon as the container is gone rather than waiting out
+          # the clock on something that cannot come back.
+          wait_for() {
+            for _ in $(seq 1 60); do
+              curl -fsS "$1" -o "$2" && return 0
+              docker ps -q -f name=fleet | grep -q . || { docker logs fleet; return 1; }
+              sleep 2
+            done
+            echo "timed out waiting for $1"; docker logs fleet; return 1
+          }
+
+          wait_for http://localhost:9090/-/ready /dev/null
+          wait_for http://localhost:3000/api/health health.json
+
+          # Provisioned, not just running: the dashboard by the uid every
+          # link in the docs uses, with its panels, and the datasource it
+          # draws from reachable through Grafana itself.
+          wait_for http://localhost:3000/api/dashboards/uid/jq-fleet dashboard.json
+          python3 -c "import json,sys; d=json.load(open('dashboard.json'))['dashboard']; n=len(d.get('panels') or []); print(d['title'], n, 'panels'); sys.exit(0 if n else 'the jq-fleet dashboard has no panels')"
+          wait_for http://localhost:3000/api/datasources/uid/jq-prometheus/health datasource.json
+          grep -q '"status":"OK"' datasource.json || { cat datasource.json; exit 1; }
+
+          # prometheus.yml still means what it says to this Prometheus: the
+          # collector is scraped. The first scrape can take one interval (30s).
+          for _ in $(seq 1 40); do
+            curl -fsS http://localhost:9090/api/v1/query \
+              --data-urlencode 'query=up{job="jq-collector"}' -o up.json \
+              && grep -q '"value":\[[0-9.]*,"1"\]' up.json && exit 0
+            sleep 3
+          done
+          echo "Prometheus never scraped the collector"; cat up.json; docker logs fleet; exit 1
 
       # A refusal at startup, not a board that is quietly one repo short. This
       # is the failure mode the whole config path is shaped to avoid.
