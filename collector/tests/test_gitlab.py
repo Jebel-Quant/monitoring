@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 from conftest import job, project
 
-from jq_collector import gitlab
+from jq_collector import forge, gitlab
 from jq_collector.config import Config
 from jq_collector.forge import normalise_gitlab_status
 
@@ -80,12 +80,12 @@ def test_only_this_forges_share_is_asked_for(make_gitlab):
 def test_gitlab_timestamps_with_a_z_and_milliseconds_parse(value, expected_year):
     import datetime
 
-    assert datetime.datetime.fromtimestamp(gitlab._ts(value), datetime.UTC).year == expected_year
+    assert datetime.datetime.fromtimestamp(forge.ts(value), datetime.UTC).year == expected_year
 
 
 @pytest.mark.parametrize("value", [None, "", "not a date"])
 def test_an_unusable_timestamp_is_zero_not_a_crash(value):
-    assert gitlab._ts(value) == 0.0
+    assert forge.ts(value) == 0.0
 
 
 # -- the status vocabulary --------------------------------------------------
@@ -161,15 +161,15 @@ def test_drift_is_measured_against_the_github_template_tags():
     drift is the same count against the same list."""
     tags = ["v2.0.0", "v1.9.0", "v1.8.0"]
 
-    assert gitlab._behind_count(tags, "v2.0.0") == 0
-    assert gitlab._behind_count(tags, "v1.8.0") == 2
+    assert forge.behind_count(tags, "v2.0.0") == 0
+    assert forge.behind_count(tags, "v1.8.0") == 2
 
 
 @pytest.mark.parametrize("ref", ["", "main", "deadbeef", "v9.9.9"])
 def test_a_ref_that_is_not_a_release_is_unknown_not_zero(ref):
     """Zero would read as "up to date", which is the opposite of "we cannot
     tell" for a repo pinned to a branch or a sha."""
-    assert gitlab._behind_count(["v2.0.0", "v1.9.0"], ref) is None
+    assert forge.behind_count(["v2.0.0", "v1.9.0"], ref) is None
 
 
 def test_the_template_pointer_is_read_as_yaml_from_the_raw_route(make_gitlab):

@@ -20,6 +20,7 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any, Protocol, TypedDict
 
 from .state import RemoteRepo, WorkflowRun
@@ -31,6 +32,48 @@ GOOD_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
 # newer push, and `stale` for a run that never really happened. Neither is green
 # or red, so they are left out of the exposition rather than counted as failures.
 INCONCLUSIVE_CONCLUSIONS = frozenset({"cancelled", "stale"})
+
+
+def ts(value: str | None) -> float:
+    """An ISO timestamp as epoch seconds, or 0.0 when there is none to read.
+
+    One function for both forges. GitLab writes ``2026-08-31T06:05:36.000Z``
+    where GitHub has no milliseconds; both parse as they stand, because 3.11
+    taught ``fromisoformat`` the whole of ISO 8601, trailing ``Z`` included, and
+    3.11 is this package's floor.
+
+    >>> ts("1970-01-01T00:01:00+00:00")
+    60.0
+    >>> ts("1970-01-01T00:01:00.000Z")
+    60.0
+    >>> ts(None), ts("not a date")
+    (0.0, 0.0)
+    """
+    if not value:
+        return 0.0
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def behind_count(tags: list[str], ref: str) -> int | None:
+    """How many template releases were published after ``ref``, newest first in ``tags``.
+
+    None when the pinned ref is not a published release tag - a branch name or
+    a sha - so the dashboard can show "unknown" instead of "current". The same
+    for both forges: the template lives on GitHub whichever forge the repo
+    pinning it lives on, so drift is measured against one tag list.
+
+    >>> behind_count(["v2.0", "v1.9", "v1.8"], "v1.8")
+    2
+    >>> behind_count(["v2.0"], "main") is None
+    True
+    """
+    if not ref or ref not in tags:
+        return None
+    return tags.index(ref)
+
 
 # GitLab's spelling -> the vocabulary the board already speaks.
 #

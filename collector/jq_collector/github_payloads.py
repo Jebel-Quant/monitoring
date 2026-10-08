@@ -8,31 +8,14 @@ no network, and so nothing that needs a fake HTTP layer to test.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
-from .forge import INCONCLUSIVE_CONCLUSIONS
+from .forge import INCONCLUSIVE_CONCLUSIONS, ts
 
 # The artifact CI uploads its coverage report as, and the file to read inside
 # it. Repos that publish nothing by this name simply have no coverage on the
 # board - which is the honest answer, and not the same as zero.
 COVERAGE_ARTIFACT = "coverage-report"
-
-
-def ts(value: str | None) -> float:
-    """An ISO timestamp as epoch seconds, or 0.0 when there is none to read.
-
-    >>> ts("1970-01-01T00:01:00+00:00")
-    60.0
-    >>> ts(None), ts("not a date")
-    (0.0, 0.0)
-    """
-    if not value:
-        return 0.0
-    try:
-        return datetime.fromisoformat(value).timestamp()
-    except ValueError:
-        return 0.0
 
 
 def active_workflow_names(workflows: list[dict[str, Any]]) -> dict[int, str]:
