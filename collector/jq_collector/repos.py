@@ -54,6 +54,15 @@ def resolve_path(raw: str, host_root: str) -> str:
     against. An absolute path is tried as written first - it is right when the
     collector runs natively - and only then under the mount, which is what a
     whole-root mount (``-v /:/host:ro``) makes work.
+
+    >>> resolve_path("~/repos/rhiza", "/host")
+    '/host/repos/rhiza'
+    >>> resolve_path("repos/rhiza", "/host")
+    '/host/repos/rhiza'
+    >>> resolve_path("~", "/host")
+    '/host'
+    >>> resolve_path("/no/such/checkout", "/host")
+    '/host/no/such/checkout'
     """
     raw = raw.strip()
     if not host_root:
@@ -83,6 +92,15 @@ def _declared_forge(item: dict[str, Any], index: int) -> str | None:
     An unknown value is refused rather than defaulted. Silently reading
     ``forge: gitbucket`` as GitHub would put a repo on the board with every
     remote panel wrong and nothing saying why.
+
+    >>> _declared_forge({"forge": " GitLab "}, 0)
+    'gitlab'
+    >>> _declared_forge({"repo": "o/r"}, 0) is None
+    True
+    >>> _declared_forge({"forge": "gitbucket"}, 3)
+    Traceback (most recent call last):
+    ...
+    jq_collector.repos.FleetError: entry 3: forge 'gitbucket' is not one of github, gitlab
     """
     declared = str(item.get("forge") or "").strip().lower()
     if not declared:
