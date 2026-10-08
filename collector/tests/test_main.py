@@ -281,8 +281,16 @@ def test_main_seeds_both_sources_before_opening_the_port(monkeypatch):
     forever as a real observation of a fleet that was never in that state."""
     order: list[str] = []
 
-    monkeypatch.setattr(entry, "_refresh_remote", lambda *_: order.append("remote"))
-    monkeypatch.setattr(entry, "_refresh_local", lambda *_: order.append("local"))
+    def remote(*_a, **_k):
+        order.append("remote")
+        return {}, _NullAPI(), [], frozenset()
+
+    def local(*_a, **_k):
+        order.append("local")
+        return {}
+
+    monkeypatch.setattr(entry.gh, "collect", remote)
+    monkeypatch.setattr(entry.localgit, "scan", local)
     monkeypatch.setattr(entry, "start_http_server", lambda _port: order.append("serve"))
     monkeypatch.setattr(entry.REGISTRY, "register", lambda _c: order.append("register"))
     # Acting as if the signal arrived the moment it is registered: main() then
@@ -297,8 +305,7 @@ def test_main_seeds_both_sources_before_opening_the_port(monkeypatch):
 
 def test_main_warns_when_there_is_no_token(monkeypatch, caplog):
     """60 calls an hour will not refresh this fleet once."""
-    monkeypatch.setattr(entry, "_refresh_remote", lambda *_: None)
-    monkeypatch.setattr(entry, "_tick_local", lambda *_: None)
+    _quiet_collection(monkeypatch)
     monkeypatch.setattr(entry, "start_http_server", lambda _port: None)
     monkeypatch.setattr(entry.REGISTRY, "register", lambda _c: None)
     monkeypatch.setattr(entry.signal, "signal", lambda _sig, handler: handler(_sig, None))
@@ -314,8 +321,7 @@ def test_main_warns_when_there_is_no_token(monkeypatch, caplog):
 
 def test_main_does_not_warn_when_a_token_is_set(monkeypatch, caplog):
     """The warning is for the deployment that needs it; a set token is silent."""
-    monkeypatch.setattr(entry, "_refresh_remote", lambda *_: None)
-    monkeypatch.setattr(entry, "_tick_local", lambda *_: None)
+    _quiet_collection(monkeypatch)
     monkeypatch.setattr(entry, "start_http_server", lambda _port: None)
     monkeypatch.setattr(entry.REGISTRY, "register", lambda _c: None)
     monkeypatch.setattr(entry.signal, "signal", lambda _sig, handler: handler(_sig, None))
@@ -338,8 +344,7 @@ def test_main_starts_a_loop_per_source_and_shuts_them_down(monkeypatch):
             started.append(self.name)
             super().start()
 
-    monkeypatch.setattr(entry, "_refresh_remote", lambda *_: None)
-    monkeypatch.setattr(entry, "_tick_local", lambda *_: None)
+    _quiet_collection(monkeypatch)
     monkeypatch.setattr(entry, "start_http_server", lambda _port: None)
     monkeypatch.setattr(entry.REGISTRY, "register", lambda _c: None)
     monkeypatch.setattr(entry.threading, "Thread", RecordingThread)
@@ -352,8 +357,7 @@ def test_main_starts_a_loop_per_source_and_shuts_them_down(monkeypatch):
 
 def test_main_logs_that_it_is_shutting_down(monkeypatch, caplog):
     caplog.set_level(logging.INFO, logger="jq_collector")
-    monkeypatch.setattr(entry, "_refresh_remote", lambda *_: None)
-    monkeypatch.setattr(entry, "_tick_local", lambda *_: None)
+    _quiet_collection(monkeypatch)
     monkeypatch.setattr(entry, "start_http_server", lambda _port: None)
     monkeypatch.setattr(entry.REGISTRY, "register", lambda _c: None)
     monkeypatch.setattr(entry.signal, "signal", lambda _sig, handler: handler(_sig, None))
@@ -385,8 +389,7 @@ def test_main_holds_the_process_open_until_the_signal_arrives(monkeypatch):
     daemons and would not hold the process on their own. Registering the handler
     schedules the signal rather than firing it, so main() actually enters the
     loop."""
-    monkeypatch.setattr(entry, "_refresh_remote", lambda *_: None)
-    monkeypatch.setattr(entry, "_tick_local", lambda *_: None)
+    _quiet_collection(monkeypatch)
     monkeypatch.setattr(entry, "start_http_server", lambda _port: None)
     monkeypatch.setattr(entry.REGISTRY, "register", lambda _c: None)
     monkeypatch.setattr(
@@ -427,6 +430,18 @@ class _NullAPI:
 
     def close(self):
         pass
+
+
+def _quiet_collection(monkeypatch):
+    """Both forges and the local scan answer at once, with nothing.
+
+    Patched at the module boundaries main() reaches through - not at its own
+    helpers - so these tests exercise the real seed and tick, and survive those
+    helpers being renamed or merged.
+    """
+    monkeypatch.setattr(entry.gh, "collect", lambda *_a, **_k: ({}, _NullAPI(), [], frozenset()))
+    monkeypatch.setattr(entry.gl, "collect", lambda *_a, **_k: ({}, _NullAPI(), frozenset()))
+    monkeypatch.setattr(entry.localgit, "scan", lambda *_a, **_k: {})
 
 
 # -- two forges, one snapshot -----------------------------------------------
@@ -563,8 +578,7 @@ def test_both_forges_contribute_to_the_excluded_set(monkeypatch):
 
 
 def test_main_warns_about_a_missing_gitlab_token_only_when_it_is_needed(monkeypatch, caplog):
-    monkeypatch.setattr(entry, "_refresh_remote", lambda *_: None)
-    monkeypatch.setattr(entry, "_tick_local", lambda *_: None)
+    _quiet_collection(monkeypatch)
     monkeypatch.setattr(entry, "start_http_server", lambda _port: None)
     monkeypatch.setattr(entry.REGISTRY, "register", lambda _c: None)
     monkeypatch.setattr(entry.signal, "signal", lambda _sig, handler: handler(_sig, None))
@@ -579,8 +593,7 @@ def test_main_warns_about_a_missing_gitlab_token_only_when_it_is_needed(monkeypa
 
 
 def test_a_github_only_fleet_is_not_nagged_about_gitlab(monkeypatch, caplog):
-    monkeypatch.setattr(entry, "_refresh_remote", lambda *_: None)
-    monkeypatch.setattr(entry, "_tick_local", lambda *_: None)
+    _quiet_collection(monkeypatch)
     monkeypatch.setattr(entry, "start_http_server", lambda _port: None)
     monkeypatch.setattr(entry.REGISTRY, "register", lambda _c: None)
     monkeypatch.setattr(entry.signal, "signal", lambda _sig, handler: handler(_sig, None))
