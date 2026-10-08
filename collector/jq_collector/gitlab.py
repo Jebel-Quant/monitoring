@@ -44,6 +44,7 @@ from typing import Any
 from urllib.parse import quote
 
 import httpx
+import yaml
 
 from .config import Config
 from .forge import GOOD_CONCLUSIONS, normalise_gitlab_status
@@ -64,7 +65,7 @@ def _ts(value: str | None) -> float:
     GitLab returns ``2026-08-31T06:05:36.000Z``, where GitHub's has no
     milliseconds. Both parse as they stand: 3.11 taught ``fromisoformat`` the
     whole of ISO 8601, including the trailing ``Z``, and 3.11 is this package's
-    floor - so this is `github._ts` with a different docstring.
+    floor - so this is `github_payloads.ts` with a different docstring.
     """
     if not value:
         return 0.0
@@ -192,8 +193,6 @@ class GitLab:
 
     def template_ref(self, full_name: str, branch: str) -> str:
         """The ref pinned in the repo's template pointer, if it is managed."""
-        import yaml
-
         pointer = quote(self._cfg.template_pointer, safe="")
         raw = self._text(
             f"/projects/{_pid(full_name)}/repository/files/{pointer}/raw",

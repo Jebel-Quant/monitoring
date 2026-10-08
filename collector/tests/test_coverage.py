@@ -17,7 +17,7 @@ import zipfile
 
 import pytest
 
-from jq_collector.github import _coverage
+from jq_collector.coverage_xml import parse as _coverage
 
 ARTIFACTS = "/repos/o/r/actions/artifacts"
 
@@ -134,16 +134,16 @@ def test_a_malformed_report_is_ci_s_problem_not_a_failed_refresh(make_client, bl
 
 def test_an_absurdly_large_report_is_refused():
     """A zip bomb would be the collector's problem, not CI's."""
-    from jq_collector import github
+    from jq_collector import coverage_xml
 
     blob = zipped("<coverage line-rate='1'/>" + " " * 1000)
-    original = github._MAX_UNPACKED_BYTES
-    github._MAX_UNPACKED_BYTES = 10
+    original = coverage_xml.MAX_UNPACKED_BYTES
+    coverage_xml.MAX_UNPACKED_BYTES = 10
     try:
         with pytest.raises(ValueError, match="unpacks to"):
             _coverage(blob)
     finally:
-        github._MAX_UNPACKED_BYTES = original
+        coverage_xml.MAX_UNPACKED_BYTES = original
 
 
 # -- the cache, which is what keeps this affordable --------------------------

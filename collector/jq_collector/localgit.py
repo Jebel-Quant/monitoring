@@ -35,6 +35,8 @@ import subprocess  # nosec B404 - only ever runs git, argv-only; see _git
 import time
 from typing import TypedDict
 
+import yaml
+
 from . import origin
 from .config import Config
 from .state import LocalRepo
@@ -84,8 +86,6 @@ def _template_ref(path: str, pointer: str) -> str:
     if not os.path.isfile(full):
         return ""
     try:
-        import yaml
-
         with open(full, encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
     except Exception as exc:  # noqa: BLE001 - a malformed pointer is data, not a crash
