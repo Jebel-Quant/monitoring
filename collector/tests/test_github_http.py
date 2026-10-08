@@ -687,3 +687,95 @@ def test_an_unchanged_branch_head_skips_the_pointer_read(monkeypatch):
     warm, *_ = gh.collect(Config(), {"o/r": ("sha", "v1.7.1")}, {})
     assert CountingAPI.pointer_reads == 1, "an unchanged head still cost a pointer read"
     assert warm["o/r"].rhiza_ref == "v1.7.1"
+
+
+class FleetAPI(StubAPI):
+    """StubAPI listing one repo per drop rule, plus one that survives them all."""
+
+    def list_repos(self, _fleet=None):
+        base = {"default_branch": "main", "owner": {"login": "o"}, "open_issues_count": 0}
+        return [
+            {**base, "full_name": "o/live", "name": "live", "visibility": "public"},
+            {**base, "full_name": "o/old", "name": "old", "visibility": "public", "archived": True},
+            {**base, "full_name": "o/skip", "name": "skip", "visibility": "public"},
+            {**base, "full_name": "o/mine", "name": "mine", "visibility": "private"},
+        ]
+
+
+@pytest.mark.parametrize(
+    ("settings", "dropped"),
+    [
+        ({}, {"o/old"}),
+        ({"include_archived": True}, set()),
+        ({"ignore": ("o/skip",)}, {"o/old", "o/skip"}),
+        ({"ignore": ("skip",)}, {"o/old", "o/skip"}),
+        ({"public_only": True}, {"o/old", "o/mine"}),
+    ],
+    ids=["archived", "archived-kept", "ignored-by-full-name", "ignored-by-name", "public-only"],
+)
+def test_dropped_repos_leave_the_board_and_are_reported(monkeypatch, settings, dropped):
+    """Reported back as well as left out, so the local scan drops their clones too."""
+    from jq_collector import github as gh
+
+    monkeypatch.setattr(gh, "GitHub", lambda _cfg: FleetAPI())
+
+    remote, _api, _tags, excluded = gh.collect(Config(**settings), {}, {})
+
+    assert excluded == dropped
+    assert set(remote) == {"o/live", "o/old", "o/skip", "o/mine"} - dropped
+
+
+def test_an_unreadable_coverage_report_is_no_coverage_not_zero(monkeypatch):
+    """The artifact exists but could not be read: no number, and the id kept."""
+    from jq_collector import github as gh
+
+    class Unreadable(StubAPI):
+        def coverage_percent(self, *_):
+            return None
+
+    monkeypatch.setattr(gh, "GitHub", lambda _cfg: Unreadable())
+
+    remote, *_ = gh.collect(Config(), {}, {})
+
+    assert remote["o/r"].coverage is None
+    assert remote["o/r"].coverage_lines == 0
+    assert remote["o/r"].coverage_artifact == 42
+
+
+def test_the_runs_become_the_repo_s_workflows_and_the_failure_is_shown(monkeypatch):
+    """Through collect, not just latest_runs: the names, durations and the red one."""
+    from jq_collector import github as gh
+
+    class Runs(StubAPI):
+        def latest_runs(self, *_):
+            return [
+                {
+                    "_name": "Lint",
+                    "conclusion": "failure",
+                    "run_started_at": "2026-08-01T00:00:00+00:00",
+                    "updated_at": "2026-08-01T00:02:00+00:00",
+                    "html_url": "https://example.test/lint",
+                },
+                {
+                    "name": "Tests",
+                    "conclusion": "success",
+                    "run_started_at": "2026-08-02T00:00:00+00:00",
+                    "updated_at": "2026-08-02T00:05:00+00:00",
+                },
+                # Clock skew must not come out as a negative duration.
+                {"conclusion": "success", "run_started_at": "2026-08-03T00:00:00+00:00"},
+            ]
+
+    monkeypatch.setattr(gh, "GitHub", lambda _cfg: Runs())
+
+    repo = gh.collect(Config(), {}, {})[0]["o/r"]
+
+    assert [(w.name, w.duration) for w in repo.workflows] == [
+        ("Lint", 120.0),
+        ("Tests", 300.0),
+        ("unnamed", 0.0),
+    ]
+    assert repo.workflows[1].url == ""
+    # Older than the green run, and still the one shown: any red makes the branch red.
+    assert (repo.ci_workflow, repo.ci_conclusion) == ("Lint", "failure")
+    assert repo.ci_url == "https://example.test/lint"

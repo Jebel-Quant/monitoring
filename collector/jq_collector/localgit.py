@@ -404,14 +404,7 @@ def scan(
     """
     prior = previous or {}
     found: dict[str, LocalRepo] = {}
-
-    # A configured root that does not exist is worth one error, not one per
-    # repo per minute. Explicit paths are unaffected by it, so this only
-    # withdraws the fallback rather than abandoning the whole scan.
-    root = cfg.repo_root
-    if root and not os.path.isdir(root):
-        log.error("repo root %s is not a directory", root)
-        root = ""
+    root = _usable_root(cfg.repo_root)
     if not root and not cfg.repo_paths:
         # Deliberate: nothing points at a working copy, so there are none to
         # report on, and an empty result is the honest answer rather than an
@@ -421,34 +414,12 @@ def scan(
     for key in cfg.repos:
         if "/" not in key or key in skip:
             continue
+        path = _checkout(key, cfg.repo_paths.get(key), root)
+        if path is None:
+            continue
         # rsplit, not split: a GitLab namespace nests, so everything before the
         # last slash is the owner and only the tail is the repo's own name.
         owner, repo_name = key.rsplit("/", 1)
-        path = cfg.repo_paths.get(key)
-        if path is None:
-            if not root:
-                continue
-            path = os.path.join(root, *key.split("/"))
-        # `.git` is a directory in a plain checkout and a file in a worktree.
-        if not os.path.exists(os.path.join(path, ".git")):
-            # Not mounted, or mounted somewhere else. Normal for a repo you
-            # monitor but have not checked out.
-            log.debug("no working copy for %s at %s", key, path)
-            continue
-
-        # The mount point claims to be this repo; the origin remote is the only
-        # thing that can confirm it. A wrong path in repos.yml would otherwise
-        # report one repo's dirty files under another repo's name.
-        actual = origin_full_name(path)
-        if actual is not None and actual.lower() != key.lower():
-            log.warning(
-                "%s is a checkout of %s, not %s - check repos.yml",
-                path,
-                actual,
-                key,
-            )
-            continue
-
         found[key] = scan_repo(
             repo_name,
             owner,
@@ -459,3 +430,39 @@ def scan(
         )
 
     return found
+
+
+def _usable_root(root: str) -> str:
+    """The configured repo root, or "" if it is set but not a directory.
+
+    A configured root that does not exist is worth one error, not one per
+    repo per minute. Explicit paths are unaffected by it, so this only
+    withdraws the fallback rather than abandoning the whole scan.
+    """
+    if root and not os.path.isdir(root):
+        log.error("repo root %s is not a directory", root)
+        return ""
+    return root
+
+
+def _checkout(key: str, path: str | None, root: str) -> str | None:
+    """Where ``key``'s working copy is, if it is there and really is ``key``."""
+    if path is None:
+        if not root:
+            return None
+        path = os.path.join(root, *key.split("/"))
+    # `.git` is a directory in a plain checkout and a file in a worktree.
+    if not os.path.exists(os.path.join(path, ".git")):
+        # Not mounted, or mounted somewhere else. Normal for a repo you
+        # monitor but have not checked out.
+        log.debug("no working copy for %s at %s", key, path)
+        return None
+
+    # The mount point claims to be this repo; the origin remote is the only
+    # thing that can confirm it. A wrong path in repos.yml would otherwise
+    # report one repo's dirty files under another repo's name.
+    actual = origin_full_name(path)
+    if actual is not None and actual.lower() != key.lower():
+        log.warning("%s is a checkout of %s, not %s - check repos.yml", path, actual, key)
+        return None
+    return path
