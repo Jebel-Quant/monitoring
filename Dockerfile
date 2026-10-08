@@ -10,10 +10,10 @@
 #
 #   docker build -t jq-monitoring .
 
-FROM prom/prometheus:v2.55.1 AS prometheus
+FROM prom/prometheus:v3.15.0 AS prometheus
 # The Ubuntu variant, not the default Alpine one: the runtime below is Debian,
 # and a musl-linked grafana will not start there.
-FROM grafana/grafana:11.3.1-ubuntu AS grafana
+FROM grafana/grafana:13.2.3-ubuntu AS grafana
 
 FROM python:3.12-slim-bookworm
 
