@@ -615,15 +615,15 @@ def test_a_duplicate_or_malformed_fleet_entry_is_skipped():
 def test_an_oversized_coverage_artifact_is_refused(caplog):
     """A guard on an archive we did not build. Coverage reports here are tens of
     kilobytes; anything near the cap is a bug or a bomb."""
-    from jq_collector import github as gh
+    from jq_collector import coverage_xml
 
     api = client(lambda _r: httpx.Response(200, content=b"x" * 64))
-    original = gh._MAX_ARTIFACT_BYTES
-    gh._MAX_ARTIFACT_BYTES = 8
+    original = coverage_xml.MAX_ARTIFACT_BYTES
+    coverage_xml.MAX_ARTIFACT_BYTES = 8
     try:
         assert api.coverage_percent("o/r", 5) is None
     finally:
-        gh._MAX_ARTIFACT_BYTES = original
+        coverage_xml.MAX_ARTIFACT_BYTES = original
     assert "skipping" in caplog.text
 
 
