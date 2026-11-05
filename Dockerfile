@@ -18,7 +18,7 @@
 FROM prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2 AS prometheus
 # The Ubuntu variant, not the default Alpine one: the runtime below is Debian,
 # and a musl-linked grafana will not start there.
-FROM grafana/grafana:13.2.4-ubuntu@sha256:d838696907b4350d9232eb8da1503dc1d1010a0359d3ce4b3f7d2ff7db28eb75 AS grafana
+FROM grafana/grafana:13.3.0-ubuntu@sha256:74111b957a8528c1d7f396f57ded8d08a6c7d856ef80eea3f637daeabdde3aa9 AS grafana
 
 FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
 
