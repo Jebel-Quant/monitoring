@@ -16,6 +16,7 @@ import pytest
 
 from jq_collector import __main__ as entry
 from jq_collector.config import Config
+from jq_collector.forge import RateLimited
 from jq_collector.state import LocalRepo, RemoteRepo, SourceHealth, Store
 
 # -- _run_once: health bookkeeping either way ------------------------------
@@ -563,6 +564,72 @@ def test_a_gitlab_outage_leaves_the_github_repos_standing(monkeypatch):
     assert store.health_for("gitlab").errors == 1
     assert store.health_for("gitlab").last_error == "gitlab is down"
     assert store.health_for("github").errors == 0
+
+
+def _rate_limited(*_a, **_k):
+    raise RateLimited("/repos/o/gh", 1794585785.0)
+
+
+def test_a_spent_github_quota_keeps_the_last_good_repos(monkeypatch):
+    """The quota says nothing about the repos. Publishing an empty map for it
+    put No data on every GitHub panel until the window reset."""
+    store = Store()
+    store.update(
+        remote={
+            "o/gh": RemoteRepo(name="gh", forge="github"),
+            "acme/web": RemoteRepo(name="web", forge="gitlab"),
+        },
+        excluded=frozenset({"o/archived", "acme/old"}),
+    )
+    monkeypatch.setattr(entry.gh, "collect", _rate_limited)
+    monkeypatch.setattr(entry.gl, "collect", _fake_gitlab({}))
+
+    entry._refresh_remote(
+        _cfg_with(
+            {"acme/web": "gitlab", "acme/old": "gitlab"},
+            ("o/gh", "o/archived", "acme/web", "acme/old"),
+        ),
+        store,
+    )
+
+    snap = store.snapshot()
+    assert set(snap.remote) == {"o/gh"}, "GitHub's repos carried over; GitLab's are its own pass's"
+    assert snap.excluded == frozenset({"o/archived"})
+
+
+def test_a_spent_github_quota_is_recorded_as_a_failure(monkeypatch):
+    """Kept data is stale data, and the board must be able to say so."""
+    store = Store()
+    monkeypatch.setattr(entry.gh, "collect", _rate_limited)
+
+    entry._refresh_remote(_cfg_with({}, ("o/gh",)), store)
+
+    health = store.health_for("github")
+    assert health.errors == 1
+    assert "rate limit exhausted" in health.last_error
+    assert store.snapshot().rate_limit_remaining == 0.0
+    assert store.snapshot().rate_limit_reset == 1794585785.0
+
+
+def test_collect_closes_its_client_when_the_quota_runs_out(monkeypatch):
+    closed: list[bool] = []
+
+    class Spent:
+        def __init__(self, _cfg):
+            pass
+
+        def release_tags(self, _repo):
+            raise RateLimited("/repos/o/t/releases", 0.0)
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(entry.gh, "GitHub", Spent)
+
+    with pytest.raises(RateLimited):
+        entry.gh.collect(Config(), {})
+
+    assert closed == [True]
 
 
 def test_both_forges_contribute_to_the_excluded_set(monkeypatch):
