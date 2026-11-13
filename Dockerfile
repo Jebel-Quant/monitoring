@@ -15,12 +15,12 @@
 # lets two builds of one commit ship different bases. The digests are the
 # multi-arch index, so both platforms below resolve from the same pin, and
 # Dependabot's docker ecosystem moves tag and digest together.
-FROM prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2 AS prometheus
+FROM prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06 AS prometheus
 # The Ubuntu variant, not the default Alpine one: the runtime below is Debian,
 # and a musl-linked grafana will not start there.
-FROM grafana/grafana:13.2.4-ubuntu@sha256:d838696907b4350d9232eb8da1503dc1d1010a0359d3ce4b3f7d2ff7db28eb75 AS grafana
+FROM grafana/grafana:13.3.0-ubuntu@sha256:74111b957a8528c1d7f396f57ded8d08a6c7d856ef80eea3f637daeabdde3aa9 AS grafana
 
-FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9
 
 # ghcr.io reads the package page's description from these, and shows a "add
 # LABEL org.opencontainers.image.description" hint until they exist. CI passes
