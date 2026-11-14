@@ -21,8 +21,9 @@ import pytest
 from test_coverage import StubAPI
 
 from jq_collector.config import Config
-from jq_collector.forge import behind_count, ts
+from jq_collector.forge import RateLimited, behind_count, fan_out, ts
 from jq_collector.github import GitHub
+from jq_collector.state import RemoteRepo
 
 
 def client(handler, **cfg_overrides) -> GitHub:
@@ -133,6 +134,75 @@ def test_the_expected_empties_are_none_not_exceptions(status, caplog):
 
     assert api._json("/repos/o/r") is None
     assert f"-> {status}" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("status", "headers"),
+    [
+        (403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1794585785"}),
+        (429, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1794585785"}),
+        (403, {"retry-after": "60"}),
+        (429, {"retry-after": "60"}),
+    ],
+)
+def test_a_spent_quota_raises_rather_than_reading_as_unreadable(status, headers):
+    """Read as an unreadable repo, an exhausted quota dropped every repo from a
+    pass that still counted as a success, and that empty snapshot blanked the
+    board until the window reset."""
+    api = client(lambda _r: httpx.Response(status, json={"message": "limit"}, headers=headers))
+
+    with pytest.raises(RateLimited) as caught:
+        api._json("/repos/o/r")
+    with pytest.raises(RateLimited):
+        api._bytes("/artifact/zip")
+
+    assert caught.value.path == "/repos/o/r"
+
+
+def test_the_reset_time_rides_on_the_exception():
+    api = client(
+        lambda _r: httpx.Response(
+            403, headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1794585785"}
+        )
+    )
+
+    with pytest.raises(RateLimited) as caught:
+        api._json("/repos/o/r")
+
+    assert caught.value.reset == 1794585785.0
+
+
+def test_a_403_with_quota_left_is_still_a_permission_answer():
+    """Dependabot alerts switched off answer 403 with plenty of quota left;
+    that is a fact about the repo, not a reason to abandon the pass."""
+    api = client(lambda _r: httpx.Response(403, headers={"x-ratelimit-remaining": "4200"}))
+
+    assert api._json("/repos/o/r/dependabot/alerts") is None
+
+
+def test_a_rate_limit_stops_the_fan_out_instead_of_dropping_repos():
+    """Every repo after the quota runs out would fail the same way; leaving
+    each one out would publish a fleet cut short at an arbitrary point."""
+
+    def build(raw):
+        if raw["n"] == "b":
+            raise RateLimited("/repos/o/b", 0.0)
+        return RemoteRepo(name=raw["n"])
+
+    with pytest.raises(RateLimited):
+        fan_out([{"n": "a"}, {"n": "b"}, {"n": "c"}], "n", build, logging.getLogger("t"), 1)
+
+
+def test_one_bad_repo_is_still_left_out_of_the_fan_out(caplog):
+    def build(raw):
+        if raw["n"] == "b":
+            raise ValueError("odd payload")
+        return RemoteRepo(name=raw["n"])
+
+    result = fan_out([{"n": "a"}, {"n": "b"}], "n", build, logging.getLogger("t"), 1)
+
+    assert set(result) == {"a"}
+    assert "repo b failed" in caplog.text
 
 
 def test_an_unexpected_status_fails_the_refresh():

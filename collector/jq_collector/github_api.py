@@ -22,7 +22,7 @@ import yaml
 
 from . import coverage_xml
 from .config import Config
-from .forge import ts
+from .forge import RateLimited, ts
 from .github_payloads import (
     active_workflow_names,
     alert_counts,
@@ -39,6 +39,19 @@ from .state import MergedPull, PullRequest
 log = logging.getLogger("jq_collector.github")
 
 _ACCEPT = "application/vnd.github+json"
+
+
+def _rate_limited(response: httpx.Response) -> bool:
+    """Whether a refusal is GitHub's rate limit rather than a permission.
+
+    Both arrive as 403 (or 429), so the status alone cannot tell them apart.
+    The primary limit says so with ``x-ratelimit-remaining: 0``; the secondary,
+    abuse-detection limit with a ``retry-after``. A 403 carrying neither is a
+    real permission answer - Dependabot alerts switched off, say - and stays one.
+    """
+    if response.status_code not in (403, 429):
+        return False
+    return response.headers.get("x-ratelimit-remaining") == "0" or "retry-after" in response.headers
 
 
 class GitHub:
@@ -64,9 +77,16 @@ class GitHub:
         self._client.close()
 
     def _get(self, path: str, **params: str | int) -> httpx.Response:
-        """GET ``path``, noting the rate-limit headers whatever the status."""
+        """GET ``path``, noting the rate-limit headers whatever the status.
+
+        Raises ``RateLimited`` when GitHub refuses because the quota is spent,
+        so that refusal is never mistaken for one repo being unreadable.
+        """
         response = self._client.get(path, params=params or None)
         self._note_rate_limit(response)
+        if _rate_limited(response):
+            log.warning("%s -> %s: rate limit exhausted", path, response.status_code)
+            raise RateLimited(path, self.rate_reset)
         return response
 
     def _note_rate_limit(self, response: httpx.Response) -> None:
@@ -86,9 +106,10 @@ class GitHub:
     def _json(self, path: str, **params: str | int) -> object | None:
         """GET returning parsed JSON, or None for the expected empty cases.
 
-        404 (no such file), 403 (rate limited or forbidden) and 409 (empty
-        repository) are all states the fleet legitimately contains; they are
-        logged and skipped rather than failing the whole refresh.
+        404 (no such file), 403 (forbidden) and 409 (empty repository) are
+        all states the fleet legitimately contains; they are logged and
+        skipped rather than failing the whole refresh. A 403 that is really
+        the rate limit never gets here - ``_get`` raises ``RateLimited``.
         """
         response = self._get(path, **params)
         if response.status_code in (403, 404, 409, 451):

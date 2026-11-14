@@ -28,6 +28,7 @@ from .config import Config
 from .forge import (
     GOOD_CONCLUSIONS,
     INCONCLUSIVE_CONCLUSIONS,
+    RateLimited,
     behind_count,
     cached_ref,
     ci_summary,
@@ -84,19 +85,26 @@ def collect(
     """
     coverage_cache = coverage_cache or {}
     api = GitHub(cfg)
-    tags = api.release_tags(cfg.template_repo)
+    # A RateLimited out of here never hands the client back, so this is the
+    # last place that can close it.
+    try:
+        tags = api.release_tags(cfg.template_repo)
 
-    # Dropped repos are reported back so the local scan can skip their clones
-    # too - otherwise a checkout keeps a dead repo on the board after the GitHub
-    # half has correctly stopped reporting it.
-    listing = api.list_repos(fleet)
-    excluded = frozenset(r["full_name"] for r in listing if _dropped(cfg, r))
-    repos = [r for r in listing if r["full_name"] not in excluded]
+        # Dropped repos are reported back so the local scan can skip their clones
+        # too - otherwise a checkout keeps a dead repo on the board after the GitHub
+        # half has correctly stopped reporting it.
+        listing = api.list_repos(fleet)
+        excluded = frozenset(r["full_name"] for r in listing if _dropped(cfg, r))
+        repos = [r for r in listing if r["full_name"] not in excluded]
 
-    def one(raw: dict[str, Any]) -> RemoteRepo:
-        return _remote_repo(api, cfg, raw, tags, ref_cache, coverage_cache)
+        def one(raw: dict[str, Any]) -> RemoteRepo:
+            return _remote_repo(api, cfg, raw, tags, ref_cache, coverage_cache)
 
-    return fan_out(repos, "full_name", one, log, _MAX_WORKERS), api, tags, excluded
+        result = fan_out(repos, "full_name", one, log, _MAX_WORKERS)
+    except RateLimited:
+        api.close()
+        raise
+    return result, api, tags, excluded
 
 
 def _dropped(cfg: Config, raw: dict[str, Any]) -> bool:

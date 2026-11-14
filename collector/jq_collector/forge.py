@@ -34,6 +34,23 @@ GOOD_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
 INCONCLUSIVE_CONCLUSIONS = frozenset({"cancelled", "stale"})
 
 
+class RateLimited(Exception):
+    """The forge has stopped answering until its rate-limit window resets.
+
+    Not one repo's problem but the whole pass's: every call after this one gets
+    the same refusal. Treating it like a 403 on one repo - logged, that repo
+    skipped - turned an exhausted quota into a "successful" pass with no repos
+    in it, and that empty snapshot replaced the last good one, so every panel
+    read No data until the window reset. Raising it instead fails the pass and
+    lets the caller keep what it had.
+    """
+
+    def __init__(self, path: str, reset: float) -> None:
+        self.path = path
+        self.reset = reset
+        super().__init__(f"rate limit exhausted at {path}; resets at {reset:.0f}")
+
+
 def ts(value: str | None) -> float:
     """An ISO timestamp as epoch seconds, or 0.0 when there is none to read.
 
@@ -225,6 +242,10 @@ def fan_out(
 
     One bad repo must not sink the refresh: a repo whose build raises is logged
     on the caller's logger, so the line still names the forge, and left out.
+
+    ``RateLimited`` is the exception: it is not one bad repo but every repo
+    after it, so leaving each one out would hand back a fleet missing however
+    many repos the quota did not stretch to. It sinks the refresh on purpose.
     """
     result: dict[str, RemoteRepo] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -233,6 +254,11 @@ def fan_out(
             full_name = futures[future]
             try:
                 result[full_name] = future.result()
+            except RateLimited:
+                # The repos still queued would each spend a call learning the
+                # same thing.
+                pool.shutdown(wait=False, cancel_futures=True)
+                raise
             except Exception as exc:  # noqa: BLE001 - one bad repo must not sink the refresh
                 log.warning("repo %s failed: %s", full_name, exc)
     return result

@@ -26,6 +26,7 @@ from . import github as gh
 from . import gitlab as gl
 from . import localgit
 from .config import Config
+from .forge import RateLimited
 from .metrics import FleetCollector
 from .state import RemoteRepo, SourceHealth, Store
 
@@ -82,9 +83,20 @@ def _refresh_remote(cfg: Config, store: Store) -> None:
     template_tags: list[str] = []
 
     def gather_github() -> None:
-        result, api, tags, dropped = gh.collect(
-            cfg, ref_cache, coverage_cache, fleet=by_forge.get("github", ())
-        )
+        try:
+            result, api, tags, dropped = gh.collect(
+                cfg, ref_cache, coverage_cache, fleet=by_forge.get("github", ())
+            )
+        except RateLimited as exc:
+            # The quota says nothing about the repos, so the last pass's view
+            # of them stands: slightly old data rather than No data on every
+            # panel until the window resets. Re-raised so the failure is still
+            # recorded against github and the staleness is visible.
+            share = set(by_forge.get("github", ()))
+            remote.update({n: r for n, r in snap.remote.items() if r.forge == "github"})
+            excluded.update(n for n in snap.excluded if n in share)
+            store.update(rate_limit_remaining=0.0, rate_limit_reset=exc.reset)
+            raise
         try:
             remote.update(result)
             excluded.update(dropped)
